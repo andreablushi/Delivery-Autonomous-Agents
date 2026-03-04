@@ -4,3 +4,4 @@ build/
 /.vscode
 **/.DS_Store
 **/*build*/
+/node_modules
