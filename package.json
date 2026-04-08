@@ -12,15 +12,17 @@
   },
   "license": "ISC",
   "author": "Andrea Blushi, Davide Donà",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@unitn-asa/deliveroo-js-sdk": "^1.3.0",
     "express": "^5.2.1"
   }
 }
