@@ -3,8 +3,6 @@
  * These types represent the internal belief state about the game world's layout.
 */
 
-export type Position = { x: number; y: number };
-
 import { TileType } from "./tile_type.js";
 
 export type Tile = {

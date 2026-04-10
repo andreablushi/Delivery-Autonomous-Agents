@@ -28,14 +28,17 @@ export class BDIAgent {
         this.socket.once('you', (info : IOAgent) => {
             this.beliefs.setMe(info);
         });
+
         // Set game configuration in beliefs once received
         this.socket.on('config', (config : IOConfig) => {
             this.beliefs.setGameSettings(config);
         });
+
         // Set map information in beliefs once received
         this.socket.on('map', (width: number, height: number, tiles: IOTile[]) => {
             this.beliefs.setMap(width, height, tiles);
         });
+
         // Running it makes it move every time it receives a sensing event, it works like a while loop
         this.perceive();
     }
@@ -53,8 +56,10 @@ export class BDIAgent {
         this.socket.on('sensing', (sensing : IOSensing) => {
             // Update beliefs about other agents based on the sensing event data
             this.beliefs.updateOtherAgents(sensing.agents);
+
             // Update beliefs about parcels based on the sensing event data
             this.beliefs.updateParcels(sensing.parcels);
+            
             // Update beliefs about crates based on the sensing event data
             this.beliefs.updateCrates(sensing.crates);
             // After updating beliefs, deliberate to form desires and intentions

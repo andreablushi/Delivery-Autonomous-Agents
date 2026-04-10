@@ -4,6 +4,7 @@
  */
 
 import { TileType } from "./tile_type.js";
+import { Position } from "./position.js";
 
 export type IOAgent = {
     id: string;           // Unique identifier for the agent
@@ -69,7 +70,7 @@ export type IOConfig = {
 }
 
 export type IOSensing = {
-    positions: { x: number; y: number }[];  // Array of tile positions currently visible to the agent
+    positions: Position[];                   // Array of tile positions currently visible to the agent
     agents: IOAgent[];                       // Other agents visible within the agent's observation range
     parcels: IOParcel[];                     // Parcels visible within the agent's observation range
     crates: IOCrate[];                       // Delivery crates visible within the agent's observation range

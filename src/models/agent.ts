@@ -1,4 +1,4 @@
-import { Position } from "./map.js";
+import { Position } from "./position.js";
 
 /**
  * Agent model types for the delivery autonomous agents system.
