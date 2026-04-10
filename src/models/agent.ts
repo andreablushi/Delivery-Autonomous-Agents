@@ -1,9 +1,9 @@
+import { Position } from "./map.js";
+
 /**
  * Agent model types for the delivery autonomous agents system.
  * These types represent the internal belief state about agents in the game world.
  */
-
-export type Position = { x: number; y: number };
 
 export type Agent = {
     id: string;                     // Unique identifier for the agent

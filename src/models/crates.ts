@@ -1,0 +1,11 @@
+import { Position } from "./map.js";
+
+/**
+ * Crate model types for the delivery autonomous agents system.
+ * These types represent the internal belief state about crates in the game world.
+*/
+
+export type Crates = {
+    id: string;                     // Unique identifier for the crate
+    lastPosition: Position | null;  // Position of the crate on the map
+};

@@ -26,7 +26,7 @@ export class BDIAgent {
 
         // Initialize the agent info in the beliefs once the connection is established
         this.socket.once('you', (info : IOAgent) => {
-            this.beliefs.initiateMe(info);
+            this.beliefs.setMe(info);
         });
         // Set game configuration in beliefs once received
         this.socket.on('config', (config : IOConfig) => {
@@ -53,6 +53,11 @@ export class BDIAgent {
         this.socket.on('sensing', (sensing : IOSensing) => {
             // Update beliefs about other agents based on the sensing event data
             this.beliefs.updateOtherAgents(sensing.agents);
+            // Update beliefs about parcels based on the sensing event data
+            this.beliefs.updateParcels(sensing.parcels);
+            // Update beliefs about crates based on the sensing event data
+            this.beliefs.updateCrates(sensing.crates);
+            // After updating beliefs, deliberate to form desires and intentions
         });
     }
 

@@ -8,8 +8,8 @@ export type IOAgent = {
     name: string;         // Display name of the agent
     teamId: string;       // Identifier of the team the agent belongs to
     teamName: string;     // Display name of the agent's team
-    x?: number;           // Agent's current column position on the map (optional if not yet placed)
-    y?: number;           // Agent's current row position on the map (optional if not yet placed)
+    x: number;           // Agent's current column position on the map (optional if not yet placed)
+    y: number;           // Agent's current row position on the map (optional if not yet placed)
     score: number;        // Agent's accumulated score
     penalty: number;      // Penalty points accumulated by the agent
 }

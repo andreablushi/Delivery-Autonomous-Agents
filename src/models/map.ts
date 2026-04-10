@@ -1,7 +1,9 @@
 /**
  * Map model types for the delivery autonomous agents system.
  * These types represent the internal belief state about the game world's layout.
- */
+*/
+
+export type Position = { x: number; y: number };
 
 export type Tile = {
     x: number;    // Tile's column index on the map
@@ -13,7 +15,6 @@ export type Tile = {
         '3'  |    // Delivery
         '4'  |    // Crate
         '5'  |    // Special
-        '5!' |    // Special-Active
         '←'  |    // Left Arrow
         '↑'  |    // Up Arrow
         '→'  |    // Right Arrow
