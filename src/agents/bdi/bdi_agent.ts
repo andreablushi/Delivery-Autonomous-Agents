@@ -59,10 +59,13 @@ export class BDIAgent {
 
             // Update beliefs about parcels based on the sensing event data
             this.beliefs.updateParcels(sensing.parcels);
-            
+
             // Update beliefs about crates based on the sensing event data
             this.beliefs.updateCrates(sensing.crates);
-            // After updating beliefs, deliberate to form desires and intentions
+
+            // Prune expired memory entries (soft expiry)
+            this.beliefs.evict();
+            //#TODO: After updating beliefs, deliberate to form desires and intentions
         });
     }
 

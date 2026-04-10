@@ -4,21 +4,25 @@ import type { GameSettings } from "../../../models/config.js";
 import type { IOAgent, IOConfig, IOTile, IOParcel, IOCrate } from "../../../models/djs.js";
 import type { Crates } from "../../../models/crates.js";
 import type { Parcels } from "../../../models/parcels.js";
+import { Memory } from "./memory.js";
 
 /**
  * Beliefs class represents the agent's beliefs about itself, the environment, and other agents.
  * It is updated based on the sensing events received from the BDI agent's perceive method.
  */
 export class Beliefs {
+    // Memory management 
+    private lastEvict = 0;
+    private readonly evictInterval = 5_000;
     // Static beliefs about the game configuration and map
     settings: GameSettings | null = null;
     map: GameMap | null = null;
     // Dynamic beliefs about the current state of the world
-    me: Agent | null = null;
-    friends: Map<string, Agent> = new Map();
-    enemies: Map<string, Agent> = new Map();
-    parcels: Map<string, Parcels> = new Map();
-    crates: Map<string, Crates> = new Map();
+    me: Agent | null = null;        
+    friends = new Memory<Agent>(5_000);
+    enemies = new Memory<Agent>(5_000);
+    parcels = new Memory<Parcels>(10_000);
+    crates  = new Memory<Crates>(30_000);
 
     /**
      * Set the game configuration in the beliefs.
@@ -90,9 +94,9 @@ export class Beliefs {
                 lastPosition: { x: agent.x, y: agent.y },
             };
             if (agent.teamId === this.me?.teamId) {
-                this.friends.set(agent.id, agentData);
+                this.friends.update(agent.id, agentData);
             } else {
-                this.enemies.set(agent.id, agentData);
+                this.enemies.update(agent.id, agentData);
             }
         });
     }
@@ -108,10 +112,10 @@ export class Beliefs {
                 carriedBy: parcel.carriedBy || null,
                 reward: parcel.reward,
             };
-            this.parcels.set(parcel.id, parcelData);
+            this.parcels.update(parcel.id, parcelData);
         });
     }
-    
+
     /**
      * Update beliefs about crates based on the sensing event data.
      */
@@ -121,7 +125,22 @@ export class Beliefs {
                 id: crate.id,
                 lastPosition: { x: crate.x, y: crate.y },
             };
-            this.crates.set(crate.id, crateData);
+            this.crates.update(crate.id, crateData);
         });
+    }
+
+
+    /**
+     * Evict stale entries from the memories of friends, enemies, parcels, and crates.
+     * @returns 
+     */
+    evict() {
+        const now = Date.now();
+        if (now - this.lastEvict < this.evictInterval) return;
+        this.lastEvict = now;
+        this.friends.evict();
+        this.enemies.evict();
+        this.parcels.evict();
+        this.crates.evict();
     }
 }
