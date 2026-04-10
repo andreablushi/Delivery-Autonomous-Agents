@@ -5,20 +5,12 @@
 
 export type Position = { x: number; y: number };
 
+import { TileType } from "./tile_type.js";
+
 export type Tile = {
     x: number;    // Tile's column index on the map
     y: number;    // Tile's row index on the map
-    type:         // Tile type code indicating the nature of the tile
-        '0'  |    // Blocked
-        '1'  |    // Walkable
-        '2'  |    // Spawn
-        '3'  |    // Delivery
-        '4'  |    // Crate
-        '5'  |    // Special
-        '←'  |    // Left Arrow
-        '↑'  |    // Up Arrow
-        '→'  |    // Right Arrow
-        '↓';      // Down Arrow
+    type: TileType; // Tile type code indicating the nature of the tile
 };
 
 export type GameMap = {

@@ -3,6 +3,8 @@
  * These types mirror the payloads emitted by the game server over the socket connection.
  */
 
+import { TileType } from "./tile_type.js";
+
 export type IOAgent = {
     id: string;           // Unique identifier for the agent
     name: string;         // Display name of the agent
@@ -31,7 +33,7 @@ export type IOCrate = {
 export type IOTile = {
     x: number;            // Tile's column index on the map
     y: number;            // Tile's row index on the map
-    type: '0' | '1' | '2' | '3' | '4' | '5' | '5!' | '←' | '↑' | '→' | '↓';  // Tile type code: '0'=blocked, '1'=walkable, '2'=spawn, '3'=delivery, '4'=crate, '5'=special, '5!'=special-active, arrows=directional
+    type: TileType;       // Tile type code indicating the nature of the tile
 }
 
 export type IOMap = {

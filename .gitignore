@@ -8,4 +8,5 @@ build/
 .env
 notes.txt
 CLAUDE.md
-/dist
+dist/
+.claude/
