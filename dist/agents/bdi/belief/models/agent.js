@@ -1,7 +1,6 @@
 /**
  * @typedef {{x: number, y: number}} Position
 */
-
 /**
  * @typedef {Object} Agent
  * @property {string} id
@@ -10,7 +9,7 @@
  * @property {number} score
  * @property {number} penalty
  * @property {Position | null} lastPosition
- */
+*/
 export class Agent {
     constructor(id, name, teamId, score = 0, penalty = 0, lastPosition = null) {
         this.id = id;
@@ -20,7 +19,6 @@ export class Agent {
         this.penalty = penalty;
         this.lastPosition = lastPosition;
     }
-
     /**
      * @param {number} score
      * @param {number} penalty

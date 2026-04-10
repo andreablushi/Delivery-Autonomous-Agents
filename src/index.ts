@@ -6,7 +6,7 @@ import { BDIAgent } from "./agents/bdi/bdi_agent.js";
 */
 async function main() {
     // Connect to the server and get the socket instance
-    const socket = await connect();
+    const socket : any = await connect();
     // Create an instance of the BDI Agent with the socket connection
     new BDIAgent(socket, process.env.NODE_ENV === "development");
 }
