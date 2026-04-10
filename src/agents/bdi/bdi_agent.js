@@ -1,4 +1,4 @@
-
+import { Beliefs } from "./belief/beliefs.js";
 /**
  * BDI Agent Implementation
  * 
@@ -10,11 +10,17 @@ export class BDIAgent {
      * @param {boolean} debug - Set to true to enable debug logging (dev mode).
      */
     constructor(socket, debug = false) {
+        // Configuration
         this.socket = socket;
         this.debug = debug;
-        this.beliefs = {};
+        // BDI components
+        this.beliefs = new Beliefs();
         this.desires = {};
         this.intentions = {};
+        // Initialize the agent info in the beliefs once the connection is established
+        this.socket.onceYou((info) => {
+            this.beliefs.initiateMe(info);
+        }); 
         // Running it makes it move every time it receives a sensing event, it works like a while loop
         this.perceive();
     }
@@ -23,20 +29,19 @@ export class BDIAgent {
      * Perceive method listens for various events from the server to update the agent's beliefs about itself, the map, and its surroundings.
     */
     perceive() {
+        // Listen for updates about the agent's own status (score, penalty, position)
         this.socket.onYou((me) => {
-            this.beliefs.me = me;
+            this.beliefs.updateMeStatus(me);
+        });
+
+        // Listen for sensing events
+        this.socket.onSensing((sensing) => {
+            // Update beliefs about other agents based on the sensing event data
+            this.beliefs.updateOtherAgents(sensing.agents);
         });
 
         this.socket.onMap((width, height, tiles) => {
             this.beliefs.map = { width, height, tiles };
-        });
-        
-        this.socket.onSensing(({ agents, parcels, crates }) => {
-            if (this.debug) console.log("[SENSING] Agents:", agents, "Parcels:", parcels, "Crates:", crates);
-            this.beliefs.agents = agents;
-            this.beliefs.parcels = parcels;
-            this.beliefs.crates = crates;
-            this.deliberate();
         });
     }
 
