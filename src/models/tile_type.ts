@@ -2,7 +2,7 @@
  * Shared tile codes used by both internal models and raw socket IO models.
  */
 
-export const TILE_TYPES = {
+export const TILE_TYPE = {
     WALL: '0',              // Not walkable
     SPAWN_POINT: '1',       // Parcel spawn location
     DELIVERY_POINT: '2',    // Parcel delivery location
@@ -17,4 +17,4 @@ export const TILE_TYPES = {
     CONVEYOR_DOWN: '↓',     // Movement forced up → down
 } as const;
 
-export type TileType = (typeof TILE_TYPES)[keyof typeof TILE_TYPES];
+export type TileType = (typeof TILE_TYPE)[keyof typeof TILE_TYPE];

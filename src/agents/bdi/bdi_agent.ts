@@ -66,11 +66,21 @@ export class BDIAgent {
 
             // Prune expired memory entries (soft expiry)
             this.beliefs.evict();
+            
             if (this.debug) console.log(
                 "[PERCEIVE] Sensing update — agents:", sensing.agents.length,
                 "| parcels:", sensing.parcels.length,
                 "| crates:", sensing.crates.length
             );
+
+            if (this.debug) {
+                console.log("[PERCEIVE] Current beliefs state:");
+                console.log("  - Friends:", this.beliefs.agents.friends.currentAll().length, "agents");
+                console.log("  - Enemies:", this.beliefs.agents.enemies.currentAll().length, "agents");
+                console.log("  - Parcels:", this.beliefs.parcels.parcels.currentAll().length, "parcels");
+                console.log("  - Crates:", this.beliefs.map.crates.currentAll().length, "crates");
+            }
+
             //#TODO: After updating beliefs, deliberate to form desires and intentions
         });
     }

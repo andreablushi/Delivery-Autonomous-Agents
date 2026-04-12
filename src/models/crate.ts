@@ -5,7 +5,7 @@ import { Position } from "./position.js";
  * These types represent the internal belief state about crates in the game world.
 */
 
-export type Crates = {
+export type Crate = {
     id: string;                     // Unique identifier for the crate
     lastPosition: Position | null;  // Position of the crate on the map
 };

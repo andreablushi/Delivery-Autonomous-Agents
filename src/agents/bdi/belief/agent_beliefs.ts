@@ -16,8 +16,8 @@ export class AgentBeliefs {
     playerSettings: PlayerSettings | null = null;   // Player settings from config
 
     /**
-     * Initialize self-belief from the given agent info.
-     * @param info 
+     * Initialize self-belief from the given IOagent info.
+     * @param info Initial info about the agent from the server, used to set up the self-belief.
      */
     setMe(info: IOAgent): void {
         this.me = {
@@ -32,7 +32,7 @@ export class AgentBeliefs {
 
     /**
      * Update self-belief with the latest info.
-     * @param info 
+     * @param info Latest info about the agent from the server.
      */
     updateMeStatus(info: IOAgent): void {
         this.me = {
@@ -45,7 +45,7 @@ export class AgentBeliefs {
 
     /**
      * Update beliefs about other agents based on the latest observations.
-     * @param agents 
+     * @param agents List of all observed agents from the latest observation, used to update beliefs about friends and enemies.
      */
     updateOtherAgents(agents: IOAgent[]): void {
         agents.forEach(agent => {                           // Create a new Agent belief from the observed IOAgent data
@@ -69,7 +69,7 @@ export class AgentBeliefs {
      * Get the list of all currently believed friend agents
      * @returns An array of friend agents
      */
-    currentFriends(): Agent[] {
+    getCurrentFriends(): Agent[] {
         return this.friends.currentAll();
     }
     
@@ -77,33 +77,7 @@ export class AgentBeliefs {
      * Get the list of all currently believed enemy agents
      * @returns An array of enemy agents
      */
-    currentEnemies(): Agent[] {
+    getCurrentEnemies(): Agent[] {
         return this.enemies.currentAll();
-    }
-
-    /**
-     * All friends currently within the observation window within observation distance.
-     * @returns An array of visible friendly agents, filtered by observation distance if own position and settings are known.
-     */
-    visibleFriends(): Agent[] {
-        const myPos = this.me?.lastPosition;
-        return this.friends.currentAll().filter(a => {
-            if (myPos && a.lastPosition && this.playerSettings?.observation_distance !== null)
-                return manhattan(myPos, a.lastPosition) <= this.playerSettings!.observation_distance;
-            return true;
-        });
-    }
-
-    /**
-     * All enemies currently within the observation window 
-     * @return An array of visible enemy agents, filtered by observation distance if own position and settings are known.
-     */
-    visibleEnemies(): Agent[] {
-        const myPos = this.me?.lastPosition;
-        return this.enemies.currentAll().filter(a => {
-            if (myPos && a.lastPosition && this.playerSettings?.observation_distance !== null)
-                return manhattan(myPos, a.lastPosition) <= this.playerSettings!.observation_distance;
-            return true;
-        });
     }
 }

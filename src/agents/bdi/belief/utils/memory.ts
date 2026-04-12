@@ -71,23 +71,6 @@ export class Memory<T> {
     }
 
     /**
-     * Get a bounded history of observations for the given key within the TTL window.
-     * @param key identifies the memory entry to retrieve history for
-     * @param lower number of most recent entries to exclude from the end
-     * @param upper number of most recent entries to include from the end (negative index)
-     * @returns An array of values for the key within the specified bounds.
-     */
-    //#TODO: If unused in the future, remove this function
-    boundedHistory(key: string, lower: number | undefined, upper: number | undefined): Observation<T>[] {
-        const now = Date.now();
-        const start = upper !== undefined ? -upper : undefined;
-        const end = lower !== undefined ? -lower : undefined;
-        return (this.memory_map.get(key) ?? [])
-            .filter(e => now - e.seenAt <= this.ttl)
-            .slice(start, end);
-    }
-
-    /**
      * Get the latest known value for every key, including stale ones (list of seen objects).
      * @returns An array of the most recent values for all keys.
      */

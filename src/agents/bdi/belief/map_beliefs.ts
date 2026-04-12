@@ -1,8 +1,8 @@
 import type { GameMap, Tile } from "../../../models/map.js";
 import type { Agent } from "../../../models/agent.js";
-import type { Crates } from "../../../models/crates.js";
+import type { Crate } from "../../../models/crate.js";
 import type { IOTile, IOCrate } from "../../../models/djs.js";
-import { TILE_TYPES } from "../../../models/tile_type.js";
+import { TILE_TYPE } from "../../../models/tile_type.js";
 import { Memory } from "./utils/memory.js";
 
 /**
@@ -11,7 +11,7 @@ import { Memory } from "./utils/memory.js";
 export class MapBeliefs {
 
     map: GameMap | null = null;             // Static map layout, set once at the start of the game
-    crates = new Memory<Crates>(30_000);    // Memory of crates, keyed by ID, with TTL-based eviction to handle dynamic changes
+    crates = new Memory<Crate>(30_000);    // Memory of crates, keyed by ID, with TTL-based eviction to handle dynamic changes
 
     /**
      * Initialize map beliefs from the given map info.
@@ -36,38 +36,24 @@ export class MapBeliefs {
     /** 
      * All parcel spawn tiles.
      */
-    spawnTiles(): Tile[] {
-        return this.map?.tiles.filter(t => t.type === TILE_TYPES.SPAWN_POINT) ?? [];
+    getSpawnTiles(): Tile[] {
+        return this.map?.tiles.filter(t => t.type === TILE_TYPE.SPAWN_POINT) ?? [];
     }
 
     /** 
      * All parcel delivery tiles.
      */
-    deliveryTiles(): Tile[] {
-        return this.map?.tiles.filter(t => t.type === TILE_TYPES.DELIVERY_POINT) ?? [];
-    }
-
-    /** 
-     * All walkable (non-wall) tiles.
-     */
-    walkableTiles(): Tile[] {
-        return this.map?.tiles.filter(t => t.type !== TILE_TYPES.WALL) ?? [];
-    }
-
-    /** 
-     * Tile at the given grid coordinates, or undefined if not found.
-     */
-    tileAt(x: number, y: number): Tile | undefined {
-        return this.map?.tiles.find(t => t.x === x && t.y === y);
+    getDeliveryTiles(): Tile[] {
+        return this.map?.tiles.filter(t => t.type === TILE_TYPE.DELIVERY_POINT) ?? [];
     }
 
     /**
-     * All spawn tiles currently occupied by the list of agents
-     * @returns An array of spawn tiles that are currently occupied by agents, based on the latest beliefs about agent positions.
+     * All spawn tiles currently free of agents, based on the latest beliefs about agent positions.
+     * @returns An array of spawn tiles that are currently free of agents.
      */
-    occupiedSpawnTiles(agents: Agent[]): Tile[] {
-        const spawns = this.spawnTiles();
-        // Get spawn tiles that are currently occupied by agents based on their last known positions
-        return spawns.filter(s => agents.some(a => a.lastPosition && a.lastPosition.x === s.x && a.lastPosition.y === s.y));
+    getFreeSpawnTiles(agents: Agent[]): Tile[] {
+        const spawns = this.getSpawnTiles();
+        // Get spawn tiles that are currently free of agents based on their last known positions
+        return spawns.filter(s => !agents.some(a => a.lastPosition && a.lastPosition.x === s.x && a.lastPosition.y === s.y));
     }
 }
