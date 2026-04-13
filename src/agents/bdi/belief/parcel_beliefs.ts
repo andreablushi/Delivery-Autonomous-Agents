@@ -1,6 +1,6 @@
 import type { Parcel } from "../../../models/parcel.js";
 import type { IOParcel } from "../../../models/djs.js";
-import { Memory } from "./utils/memory.js";
+import { Tracker } from "./utils/tracker.js";
 import { ParcelSettings } from "../../../models/config.js";
 
 /**
@@ -8,12 +8,17 @@ import { ParcelSettings } from "../../../models/config.js";
  */
 export class ParcelBeliefs {
 
-    parcels = new Memory<Parcel>(Infinity);         // Set infinite TTL for parcels, as we will remove them based on their reward
-
+    parcels = new Tracker<Parcel>();                // Latest-only store; eviction is handled by the decay logic via delete()
     parcelSettings: ParcelSettings | null = null;   // Parcel settings from config
 
-    private lastScoreUpdate = Date.now();           // Timestamp of the last score update, used to trigger reward decay
+    private lastScoreUpdate = 0;                    // Timestamp of the last score update, used to trigger reward decay
     
+    /**
+     * Update parcel beliefs with the latest observed parcels.
+     * @param parcels Array of parcels from the server, converted to internal Parcels type and stored in memory.
+     * @param sensedParcels 
+     * @returns void
+     */
     private updateSensedParcels(sensedParcels: IOParcel[]): void {
         // Update memory based on sensed data
         sensedParcels.forEach(parcel => {
@@ -26,28 +31,32 @@ export class ParcelBeliefs {
         });
     }
 
-    private decayNonSensedParcels(sensedParcelsIds: Set<string>, decayInterval: number, now: number): void {
-        
-        for (const parcelId of this.parcels.getKeys()) {
-            
+    /**
+     * Remove all decayed parcels that haven't been sensed for a while, based on the reward decay logic.
+     * @param sensedParcelsIds 
+     * @param decayInterval 
+     * @param now 
+     * @returns void
+     */
+    private decayNonSensedParcels(sensedParcels: IOParcel[], decayInterval: number, now: number): void {
+        // Iterate over all currently believed parcels 
+        for (const parcel of this.parcels.getCurrentAll()) {
             // If the parcel is currently sensed skip
-            if (sensedParcelsIds.has(parcelId)) continue;
-            
-            const parcel = this.parcels.current(parcelId);
-            const lastSeen = this.parcels.lastSeenAt(parcelId);
+            if (sensedParcels.some(p => p.id === parcel.id)) continue;
+            // If the parcel is not currently sensed, check how long it's been since it was last seen
+            const lastSeen = this.parcels.getLastSeenAt(parcel.id);
             if (!parcel || lastSeen === undefined) continue;
-
+            // Calculate how many decay intervals have passed since the parcel was last seen
             const decayTicks = Math.floor((now - lastSeen) / decayInterval);
             if (decayTicks <= 0) continue;
-
             // Update the parcel's reward based on how long it's been since it was last seen
             const updatedReward = parcel.reward - decayTicks;
             if (updatedReward <= 0) {
-                this.parcels.delete(parcelId);
+                this.parcels.delete(parcel.id);
                 continue;
             }
-
-            this.parcels.update(parcelId, {
+            // Update the parcel belief with the decayed reward
+            this.parcels.update(parcel.id, {
                 ...parcel,
                 reward: updatedReward,
             });
@@ -57,6 +66,7 @@ export class ParcelBeliefs {
     /**
      * Update parcel beliefs with the latest observed parcels.
      * @param parcels Array of parcels from the server, converted to internal Parcels type and stored in memory.
+     * @returns void
      */
     updateParcels(sensedParcels: IOParcel[]): void {
         this.updateSensedParcels(sensedParcels);
@@ -70,7 +80,15 @@ export class ParcelBeliefs {
         this.lastScoreUpdate = now; 
         
         // Update beliefs for parcels that are not currently sensed
-        this.decayNonSensedParcels(new Set(sensedParcels.map(p => p.id)), decayInterval, now);        
+        this.decayNonSensedParcels(sensedParcels, decayInterval, now);        
+    }
+
+    /**
+     * Get the current believed positions of all parcels.
+     * @returns An array of all parcels with their current believed state
+     */
+    getCurrentParcels(): Parcel[] {
+        return this.parcels.getCurrentAll();
     }
 
     /** 
@@ -78,7 +96,7 @@ export class ParcelBeliefs {
      * @return An array of available parcels, filtered to exclude those currently carried by agents.
      */
     getAvailableParcels(): Parcel[] {
-        return this.parcels.currentAll().filter(p => p.carriedBy === null);
+        return this.parcels.getCurrentAll().filter(p => p.carriedBy === null);
     }
 
     /** 

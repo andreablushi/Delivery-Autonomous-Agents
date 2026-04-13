@@ -39,7 +39,7 @@ export class Memory<T> {
      * @param key 
      * @returns The most recent value for the key, or undefined if no entries exist.
      */
-    current(key: string): T | undefined {
+    getCurrent(key: string): T | undefined {
         // Get all the entries for the key
         const entries = this.memory_map.get(key);
         if (!entries?.length) return undefined;
@@ -48,15 +48,13 @@ export class Memory<T> {
     }
 
     /**
-     * Check if the latest observation for the given key is stale (i.e., older than TTL).
-     * @param key 
-     * @returns True if the latest entry for the key is stale or if no entries exist, false otherwise.
+     * Get the latest known value for every key, including stale ones (list of seen objects).
+     * @returns An array of the most recent values for all keys.
      */
-    isStale(key: string): boolean {
-        const entries = this.memory_map.get(key);
-        if (!entries?.length) return true;
-
-        return Date.now() - entries[entries.length - 1].seenAt > this.ttl;
+    getCurrentAll(): T[] {
+        // For each key, get the most recent entry's value
+        return Array.from(this.memory_map.values())
+            .map(entries => entries[entries.length - 1].value);
     }
 
     /**
@@ -64,7 +62,7 @@ export class Memory<T> {
      * @param key 
      * @returns An array of values for the key within the TTL window.
      */
-    history(key: string): Observation<T>[] {
+    getHistory(key: string): Observation<T>[] {
         const now = Date.now();
         return (this.memory_map.get(key) ?? [])
             .filter(e => now - e.seenAt <= this.ttl);
@@ -79,38 +77,29 @@ export class Memory<T> {
     }
 
     /**
-     * Get the timestamp of the latest observation for the given key.
-     * @param key
-     * @returns Epoch milliseconds when the key was last seen, or undefined if absent.
+     * Get the timestamp of when the given key was last updated, or undefined if the key does not exist.
+     * @param key 
+     * @returns The timestamp of the last update for the key, or undefined if the key does not exist.
      */
-    lastSeenAt(key: string): number | undefined {
+    getLastSeenAt(key: string): number | undefined {
         const entries = this.memory_map.get(key);
         if (!entries?.length) return undefined;
-
         return entries[entries.length - 1].seenAt;
     }
 
     /**
      * Remove all observations for a key from memory.
      * @param key
+     * @returns void
      */
     delete(key: string): void {
         this.memory_map.delete(key);
     }
 
     /**
-     * Get the latest known value for every key, including stale ones (list of seen objects).
-     * @returns An array of the most recent values for all keys.
-     */
-    currentAll(): T[] {
-        // For each key, get the most recent entry's value
-        return Array.from(this.memory_map.values())
-            .map(entries => entries[entries.length - 1].value);
-    }
-
-    /**
      * Evict entries that are older than the TTL, but keep at least the most recent entry for each key.
      * This method should be called periodically to prevent unbounded memory growth.
+     * @returns void
     */
     evict(): void {
         const now = Date.now();

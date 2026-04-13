@@ -14,8 +14,6 @@ export type GameSettings = {
     title: string;                         // Title of the game
     description: string;                   // Description of the game
     max_player: number;                    // Maximum number of players
-    player_setting: PlayerSettings;        // Settings for player behavior
-    parcel_setting: ParcelSettings;        // Settings for parcel behavior
 }
 
 export type ParcelSettings = {

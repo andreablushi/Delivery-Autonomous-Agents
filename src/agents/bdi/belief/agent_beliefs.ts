@@ -2,8 +2,7 @@ import type { Agent } from "../../../models/agent.js";
 import type { PlayerSettings } from "../../../models/config.js";
 import type { IOAgent } from "../../../models/djs.js";
 import { Memory } from "./utils/memory.js";
-import { manhattan } from "./utils/utils.js";
-
+import { Tracker } from "./utils/tracker.js";
 
 /**
  * Beliefs about the agent itself and other observed agents.
@@ -11,35 +10,26 @@ import { manhattan } from "./utils/utils.js";
 export class AgentBeliefs {
 
     me: Agent | null = null;                        // Current self-belief, updated directly from observations, without memory
-    friends = new Memory<Agent>(5_000);             // Memory of friendly agents, keyed by ID, with TTL-based eviction
+    friends = new Tracker<Agent>();                 // Tracker of friendly agents, keyed by ID, with TTL-based eviction
     enemies = new Memory<Agent>(5_000);             // Memory of enemy agents, keyed by ID, with TTL-based eviction
     playerSettings: PlayerSettings | null = null;   // Player settings from config
 
-    /**
-     * Initialize self-belief from the given IOagent info.
-     * @param info Initial info about the agent from the server, used to set up the self-belief.
-     */
-    setMe(info: IOAgent): void {
-        this.me = {
-            id: info.id,
-            name: info.name,
-            teamId: info.teamId,
-            score: info.score,
-            penalty: info.penalty,
-            lastPosition: { x: info.x, y: info.y },
-        };
-    }
+    // Memory management - EvictInterval prevents the agent from evicting stale beliefs too frequently,
+    private lastEvict = 0;                      // Timestamp of the last eviction of stale beliefs
+    private readonly EVICT_INTERVAL = 5_000;     // Number of milliseconds between evictions of stale beliefs
 
     /**
      * Update self-belief with the latest info.
      * @param info Latest info about the agent from the server.
      */
-    updateMeStatus(info: IOAgent): void {
+    updateMe(sensedMe: IOAgent): void {
         this.me = {
-            ...this.me!,                            // Keep existing immutable info (id, name, teamId)
-            score: info.score,
-            penalty: info.penalty,
-            lastPosition: { x: info.x, y: info.y },
+            id: sensedMe.id,
+            name: sensedMe.name,
+            teamId: sensedMe.teamId,
+            score: sensedMe.score,
+            penalty: sensedMe.penalty,
+            lastPosition: { x: sensedMe.x, y: sensedMe.y },
         };
     }
 
@@ -47,8 +37,8 @@ export class AgentBeliefs {
      * Update beliefs about other agents based on the latest observations.
      * @param agents List of all observed agents from the latest observation, used to update beliefs about friends and enemies.
      */
-    updateOtherAgents(agents: IOAgent[]): void {
-        agents.forEach(agent => {                           // Create a new Agent belief from the observed IOAgent data
+    updateOtherAgents(sensedAgents: IOAgent[]): void {
+        sensedAgents.forEach(agent => {                           // Create a new Agent belief from the observed IOAgent data
             const data: Agent = {
                 id: agent.id,
                 name: agent.name,
@@ -63,6 +53,8 @@ export class AgentBeliefs {
                 this.enemies.update(agent.id, data);
             }
         });
+        // Evict stale beliefs that haven't been updated recently to prevent memory bloat
+        this.evict()
     }
 
     /**
@@ -70,7 +62,7 @@ export class AgentBeliefs {
      * @returns An array of friend agents
      */
     getCurrentFriends(): Agent[] {
-        return this.friends.currentAll();
+        return this.friends.getCurrentAll();
     }
     
     /**
@@ -78,6 +70,17 @@ export class AgentBeliefs {
      * @returns An array of enemy agents
      */
     getCurrentEnemies(): Agent[] {
-        return this.enemies.currentAll();
+        return this.enemies.getCurrentAll();
+    }
+
+    /**
+     * Delete the belief entry for the given agent ID from both friends and enemies trackers.
+     * @param agentId The ID of the agent to delete from beliefs.
+     */
+    private evict(): void {
+        const now = Date.now();
+        if (now - this.lastEvict < this.EVICT_INTERVAL) return;
+        this.lastEvict = now;
+        this.enemies.evict();
     }
 }

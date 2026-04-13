@@ -5,24 +5,22 @@ import { MapBeliefs } from "./map_beliefs.js";
 import { ParcelBeliefs } from "./parcel_beliefs.js";
 
 /**
- * Main belief system for the BDI agent, containing sub-systems for different aspects of the environment.
+ * Parser for human-friendly time intervals in the config, supporting formats like "5s", "2m", "1h", or special values like "infinite".
+ * @param interval The time interval string to parse.
+ * @returns The time interval in milliseconds, or Infinity for special values.
+ * @throws Error if the format is invalid or contains unsupported units.
  */
-
 function parseTimeInterval(interval: string): number {
     const normalized = interval.trim().toLowerCase();
-
     if (normalized === "infinite" || normalized === "infinity" || normalized === "never") {
         return Number.POSITIVE_INFINITY;
     }
-
     const match = normalized.match(/^(\d+)(ms|s|m|h)?$/);
     if (!match) {
         throw new Error(`Invalid time interval format: ${interval}`);
     }
-
     const value = Number(match[1]);
     const unit = match[2] ?? "ms";
-
     switch (unit) {
         case "ms": return value;
         case "s": return value * 1_000;
@@ -32,6 +30,9 @@ function parseTimeInterval(interval: string): number {
     }
 }
 
+/**
+ * The Beliefs class serves as the central repository for all beliefs held by the BDI agent
+ */
 export class Beliefs {
     // Belief sub-systems
     readonly agents  = new AgentBeliefs();   // Tracks me, friends, and enemies
@@ -41,48 +42,29 @@ export class Beliefs {
     // Centralized game settings distributed to sub-systems on arrival
     settings: GameSettings | null = null;
 
-    // Memory management - EvictInterval prevents the agent from evicting stale beliefs too frequently,
-    private lastEvict = 0;                      // Timestamp of the last eviction of stale beliefs
-    private readonly EVICT_INTERVAL = 5_000;     // Number of milliseconds between evictions of stale beliefs
-
     /**
      * Set game configuration and distribute relevant slices to each sub-system.
      * @param config Raw config from the server
+     * @returns void
      */
     setSettings(config: IOConfig): void {
         this.settings = {
             title: config.GAME.title,
             description: config.GAME.description,
             max_player: config.GAME.maxPlayers,
-            player_setting: {
+        };
+        // Distribute relevant config slices to sub-systems
+        this.agents.playerSettings ={
                 movement_duration: config.GAME.player.movement_duration,
                 observation_distance: config.GAME.player.observation_distance,
                 parcel_capacity: config.GAME.player.capacity,
-            },
-            parcel_setting: {
+        }
+        this.parcels.parcelSettings = {
                 parcel_spawn_interval: parseTimeInterval(config.GAME.parcels.generation_event),
                 reward_decay_interval: parseTimeInterval(config.GAME.parcels.decaying_event),
                 max_concurrent_parcels: config.GAME.parcels.max,
                 reward_avg: config.GAME.parcels.reward_avg,
                 reward_variance: config.GAME.parcels.reward_variance,
-            },
-        };
-        // Distribute relevant config slices to sub-systems
-        this.agents.playerSettings = this.settings.player_setting;
-        this.parcels.parcelSettings = this.settings.parcel_setting;
-    }
-
-    /**
-     * Evict stale entries from all dynamic memories.
-     * Throttled to run at most once every evictInterval ms.
-     */
-    evict(): void {
-        const now = Date.now();
-        if (now - this.lastEvict < this.EVICT_INTERVAL) return;
-        this.lastEvict = now;
-        this.agents.friends.evict();
-        this.agents.enemies.evict();
-        this.parcels.parcels.evict();
-        this.map.crates.evict();
+        }
     }
 }

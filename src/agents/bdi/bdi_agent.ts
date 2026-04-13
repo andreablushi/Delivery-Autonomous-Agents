@@ -26,7 +26,7 @@ export class BDIAgent {
 
         // Initialize the agent info in the beliefs once the connection is established
         this.socket.once('you', (info : IOAgent) => {
-            this.beliefs.agents.setMe(info);
+            this.beliefs.agents.updateMe(info);
         });
 
         // Set game configuration in beliefs once received
@@ -49,7 +49,7 @@ export class BDIAgent {
     perceive() {
         // Listen for updates about the agent's own status (score, penalty, position)
         this.socket.on('you', (me : IOAgent) => {
-            this.beliefs.agents.updateMeStatus(me);
+            this.beliefs.agents.updateMe(me);
             if (this.debug) console.log("[PERCEIVE] Me status updated — pos: [", me.x, ", ", me.y, "]| score:", me.score, "]");
         });
 
@@ -63,9 +63,6 @@ export class BDIAgent {
 
             // Update beliefs about crates based on the sensing event data
             this.beliefs.map.updateCrates(sensing.crates);
-
-            // Prune expired memory entries (soft expiry)
-            this.beliefs.evict();
             
             if (this.debug) console.log(
                 "[PERCEIVE] Sensing update — agents:", sensing.agents.length,
@@ -75,10 +72,10 @@ export class BDIAgent {
 
             if (this.debug) {
                 console.log("[PERCEIVE] Current beliefs state:");
-                console.log("  - Friends:", this.beliefs.agents.friends.currentAll().length, "agents");
-                console.log("  - Enemies:", this.beliefs.agents.enemies.currentAll().length, "agents");
-                console.log("  - Parcels:", this.beliefs.parcels.parcels.currentAll().length, "parcels");
-                console.log("  - Crates:", this.beliefs.map.crates.currentAll().length, "crates");
+                console.log("  - Friends:", this.beliefs.agents.getCurrentFriends().length, "agents");
+                console.log("  - Enemies:", this.beliefs.agents.getCurrentEnemies().length, "agents");
+                console.log("  - Parcels:", this.beliefs.parcels.parcels.getCurrentAll().length, "parcels");
+                console.log("  - Crates:", this.beliefs.map.crates.getCurrentAll().length, "crates");
             }
             //#TODO: After updating beliefs, deliberate to form desires and intentions
         });
@@ -90,10 +87,10 @@ export class BDIAgent {
     deliberate() {
         if (this.debug) console.log(
             "[DELIBERATE] Beliefs snapshot — me:", this.beliefs.agents.me?.id ?? "unknown",
-            "| friends:", this.beliefs.agents.friends.currentAll().length,
-            "| enemies:", this.beliefs.agents.enemies.currentAll().length,
-            "| parcels:", this.beliefs.parcels.parcels.currentAll().length,
-            "| crates:", this.beliefs.map.crates.currentAll().length
+            "| friends:", this.beliefs.agents.getCurrentFriends().length,
+            "| enemies:", this.beliefs.agents.getCurrentEnemies().length,
+            "| parcels:", this.beliefs.parcels.parcels.getCurrentAll().length,
+            "| crates:", this.beliefs.map.getCurrentCrates().length
         );
         // Placeholder: always desire to move up
         this.desires = ["moveUp"];
