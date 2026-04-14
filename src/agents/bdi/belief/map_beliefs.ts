@@ -28,11 +28,20 @@ export class MapBeliefs {
     /**
      * Update crate beliefs with the latest observed crates.
      * @param crates Array of crates from the server, converted to internal Crates type and stored in memory.
+     * @param visiblePositions Array of positions that are currently visible.
      * @returns void
      */
-    updateCrates(sensedCrates: IOCrate[]): void {
+    updateCrates(sensedCrates: IOCrate[], visiblePositions: Position[]): void {
         sensedCrates.forEach(crate => {
             this.crates.update(crate.id, { id: crate.id, lastPosition: { x: crate.x, y: crate.y } });
+        });
+
+        // Invalidate lastPosition for crates not currently visible but whose last known position is in view
+        const sensedIds = new Set(sensedCrates.map(c => c.id));
+        this.crates.getCurrentAll().forEach(crate => {
+            if (sensedIds.has(crate.id) || !crate.lastPosition) return;
+            if (!visiblePositions.some(p => p.x === crate.lastPosition!.x && p.y === crate.lastPosition!.y)) return;
+            this.crates.update(crate.id, { ...crate, lastPosition: null });
         });
     }
 

@@ -1,5 +1,6 @@
 import type { Parcel } from "../../../models/parcel.js";
 import type { IOParcel } from "../../../models/djs.js";
+import type { Position } from "../../../models/position.js";
 import { Tracker } from "./utils/tracker.js";
 import { ParcelSettings } from "../../../models/config.js";
 
@@ -87,7 +88,7 @@ export class ParcelBeliefs {
      * @param parcels Array of parcels from the server, converted to internal Parcels type and stored in memory.
      * @returns void
      */
-    updateParcels(sensedParcels: IOParcel[]): void {
+    updateParcels(sensedParcels: IOParcel[], visiblePositions: Position[]): void {
         this.updateSensedParcels(sensedParcels);
 
         // Guard clause to prevent decaying rewards too frequently (only decay once per decay interval)
@@ -100,6 +101,14 @@ export class ParcelBeliefs {
         
         // Update beliefs for parcels that are not currently sensed
         this.applyRewardDecay(sensedParcels, decayInterval, now);
+
+        // Invalidate lastPosition for parcels not currently visible but whose last known position is in view
+        const sensedIds = new Set(sensedParcels.map(p => p.id));
+        this.parcels.getCurrentAll().forEach(parcel => {
+            if (sensedIds.has(parcel.id) || !parcel.lastPosition) return;
+            if (!visiblePositions.some(p => p.x === parcel.lastPosition!.x && p.y === parcel.lastPosition!.y)) return;
+            this.parcels.update(parcel.id, { ...parcel, lastPosition: null });
+        });
     }
 
     /**

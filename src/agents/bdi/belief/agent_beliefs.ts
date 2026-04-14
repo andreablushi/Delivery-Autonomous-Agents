@@ -1,7 +1,7 @@
 import type { Agent } from "../../../models/agent.js";
 import type { PlayerSettings } from "../../../models/config.js";
 import type { IOAgent } from "../../../models/djs.js";
-import { Direction, DirectionPrediction } from "../../../models/position.js";
+import { Direction, DirectionPrediction, Position } from "../../../models/position.js";
 import { Memory } from "./utils/memory.js";
 import { Tracker } from "./utils/tracker.js";
 
@@ -14,7 +14,8 @@ export class AgentBeliefs {
 
     private me: Agent | null = null;                        // Current self-belief, updated directly from observations, without memory
     private friends = new Tracker<Agent>();                 // Tracker of friendly agents, keyed by ID, with TTL-based eviction
-    private enemies = new Memory<Agent>(1_000, 10);         // Memory of enemy agents, keyed by ID, with TTL-based eviction
+    private enemies = new Tracker<Agent>();                 // Tracker of enemy agents, keyed by ID, with TTL-based eviction
+    private enemiesMemory = new Memory<Agent>(1_000, 10);   // Memory of enemy agents, keyed by ID, with TTL-based eviction
     private playerSettings: PlayerSettings | null = null;   // Player settings from config
 
     // Memory management - EvictInterval prevents the agent from evicting stale beliefs too frequently,
@@ -49,7 +50,8 @@ export class AgentBeliefs {
      * Update beliefs about other agents based on the latest observations.
      * @param sensedAgents List of all observed agents from the latest observation, used to update beliefs about friends and enemies.
      */
-    updateOtherAgents(sensedAgents: IOAgent[]): void {
+    updateOtherAgents(sensedAgents: IOAgent[], visiblePositions: Position[]): void {
+
         sensedAgents.forEach(agent => {                           // Create a new Agent belief from the observed IOAgent data
             const data: Agent = {
                 id: agent.id,
@@ -61,11 +63,22 @@ export class AgentBeliefs {
             };
             if (agent.teamId === this.me?.teamId) {         // Update friend beliefs
                 this.friends.update(agent.id, data);
-            } else {                                        // Update enemy beliefs   
+            } else {                                        // Update enemy beliefs
                 this.enemies.update(agent.id, data);
+                this.enemiesMemory.update(agent.id, data);     // Also update the memory of enemies for long-term tracking
             }
         });
-        this.evict()
+
+        // Invalidate lastPosition for enemies not currently visible but whose last known position is in view
+        const sensedIds = new Set(sensedAgents.map(a => a.id));
+        this.enemies.getCurrentAll().forEach( enemy => {
+             if (sensedIds.has(enemy.id) || !enemy.lastPosition) return;
+             if (!visiblePositions.some(p => p.x === enemy.lastPosition!.x && p.y === enemy.lastPosition!.y)) return;
+             this.enemies.update(enemy.id, { ...enemy, lastPosition: null });
+        });
+
+        // Evict stale beliefs that haven't been updated recently to prevent memory bloat. This is done after processing the current observations to ensure we don't evict beliefs that were just updated.
+        this.evict();
     }
 
     /**
@@ -99,8 +112,10 @@ export class AgentBeliefs {
      */
     //#TODO: Right now is basic majority vote
     predictEnemyDirection(id: string): DirectionPrediction | null {
+        // If I have a tracking for this enemy, use its history to predict
+        if(!this.enemies.getCurrent(id)?.lastPosition) return null;
         // Get the history of observed positions for the specified enemy agent
-        const history = this.enemies.getHistory(id);
+        const history = this.enemiesMemory.getHistory(id);
         if (history.length < 2) return null;
 
         const positions = history.map(o => o.value.lastPosition);
@@ -163,6 +178,6 @@ export class AgentBeliefs {
         const now = Date.now();
         if (now - this.lastEvict < this.EVICT_INTERVAL) return;
         this.lastEvict = now;
-        this.enemies.evict();
+        this.enemiesMemory.evict();
     }
 }

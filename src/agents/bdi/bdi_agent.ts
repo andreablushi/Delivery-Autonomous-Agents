@@ -57,14 +57,13 @@ export class BDIAgent {
         // Listen for sensing events
         this.socket.on('sensing', (sensing : IOSensing) => {
             // Update beliefs about other agents based on the sensing event data
-            this.beliefs.agents.updateOtherAgents(sensing.agents);
+            this.beliefs.agents.updateOtherAgents(sensing.agents, sensing.positions);
 
             // Update beliefs about parcels based on the sensing event data
-            this.beliefs.parcels.updateParcels(sensing.parcels);
+            this.beliefs.parcels.updateParcels(sensing.parcels, sensing.positions);
 
             // Update beliefs about crates based on the sensing event data
-            this.beliefs.map.updateCrates(sensing.crates);
-            console.log(sensing.crates);
+            this.beliefs.map.updateCrates(sensing.crates, sensing.positions);
             
             if (this.debug) console.log(
                 "[PERCEIVE] Sensing update — agents:", sensing.agents.length,
