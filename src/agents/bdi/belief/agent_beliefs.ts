@@ -13,8 +13,8 @@ import { Tracker } from "./utils/tracker.js";
 export class AgentBeliefs {
 
     private me: Agent | null = null;                        // Current self-belief, updated directly from observations, without memory
-    private friends = new Tracker<Agent>();                 // Tracker of friendly agents, keyed by ID, with TTL-based eviction
-    private enemies = new Tracker<Agent>();                 // Tracker of enemy agents, keyed by ID, with TTL-based eviction
+    private friends = new Tracker<Agent>();                 // Tracker of friend agents, keyed by ID, without memory
+    private enemies = new Tracker<Agent>();                 // Tracker of enemy agents, keyed by ID, keeping only the latest observation for each enemy, without memory
     private enemiesMemory = new Memory<Agent>(1_000, 10);   // Memory of enemy agents, keyed by ID, with TTL-based eviction
     private playerSettings: PlayerSettings | null = null;   // Player settings from config
 
@@ -50,7 +50,7 @@ export class AgentBeliefs {
      * Update beliefs about other agents based on the latest observations.
      * @param sensedAgents List of all observed agents from the latest observation, used to update beliefs about friends and enemies.
      */
-    updateOtherAgents(sensedAgents: IOAgent[], visiblePositions: Position[]): void {
+    updateOtherAgents(sensedAgents: IOAgent[], sensedPositions: Position[]): void {
 
         sensedAgents.forEach(agent => {                           // Create a new Agent belief from the observed IOAgent data
             const data: Agent = {
@@ -61,21 +61,19 @@ export class AgentBeliefs {
                 penalty: agent.penalty,
                 lastPosition: { x: agent.x, y: agent.y },
             };
-            if (agent.teamId === this.me?.teamId) {         // Update friend beliefs
+            // Update friend beliefs
+            if (agent.teamId === this.me?.teamId) {
                 this.friends.update(agent.id, data);
-            } else {                                        // Update enemy beliefs
+            } 
+            // Update enemy beliefs
+            else {                                        
                 this.enemies.update(agent.id, data);
                 this.enemiesMemory.update(agent.id, data);     // Also update the memory of enemies for long-term tracking
             }
         });
 
         // Invalidate lastPosition for enemies not currently visible but whose last known position is in view
-        const sensedIds = new Set(sensedAgents.map(a => a.id));
-        this.enemies.getCurrentAll().forEach( enemy => {
-             if (sensedIds.has(enemy.id) || !enemy.lastPosition) return;
-             if (!visiblePositions.some(p => p.x === enemy.lastPosition!.x && p.y === enemy.lastPosition!.y)) return;
-             this.enemies.update(enemy.id, { ...enemy, lastPosition: null });
-        });
+        this.enemies.invalidateAtSensedPositions(sensedAgents, sensedPositions);
 
         // Evict stale beliefs that haven't been updated recently to prevent memory bloat. This is done after processing the current observations to ensure we don't evict beliefs that were just updated.
         this.evict();

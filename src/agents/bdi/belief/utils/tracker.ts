@@ -1,9 +1,12 @@
 import { Observation } from "../../../../models/memory.js";
+import { Position } from "../../../../models/position.js";
+
+type Positionable = { id: string; lastPosition: Position | null };
 
 /**
  * A simple key-value store that tracks the latest value for each key along with the timestamp of when it was last updated.
  */
-export class Tracker<T> {
+export class Tracker<T extends Positionable> {
     // Internal mapping from ids to their latest observed value and the timestamp of that observation.
     private store = new Map<string, Observation<T>>();
 
@@ -15,7 +18,7 @@ export class Tracker<T> {
      */
     update(key: string, value: T): void {
         // Avoid memorizing intermediate positions
-        const pos = (value as any)?.lastPosition;
+        const pos = value.lastPosition;
         if (pos && (!Number.isInteger(pos.x) || !Number.isInteger(pos.y))) return;
         // Store the new value along with the current timestamp
         this.store.set(key, { value, seenAt: Date.now() });
@@ -33,9 +36,9 @@ export class Tracker<T> {
         if (!existing) return;
         
         // Avoid memorizing intermediate positions
-        const pos = (value as any)?.lastPosition;
+        const pos = value.lastPosition;
         if (pos && (!Number.isInteger(pos.x) || !Number.isInteger(pos.y))) return;
-        
+
         // Update the object with the new value, keeping old timestamp
         this.store.set(key, { value, seenAt: existing.seenAt });
     }
@@ -80,5 +83,20 @@ export class Tracker<T> {
      */
     delete(key: string): void {
         this.store.delete(key);
+    }
+
+    /**
+     * Invalidate lastPosition for tracked objects whose last known position is within the visible area but were not sensed there.
+     * If an object's last known position is visible but the object was not sensed at that position, it has moved to an unknown location.
+     * @param sensedItems Items observed in the current sensing window (used to exclude already-sensed objects)
+     * @param sensedPositions Positions currently within the agent's visible range
+     */
+    invalidateAtSensedPositions(sensedItems: Array<{ id: string }>, sensedPositions: Position[]): void {
+        const sensedIds = new Set(sensedItems.map(item => item.id));
+        this.getCurrentAll().forEach(item => {
+            if (sensedIds.has(item.id) || !item.lastPosition) return;
+            if (!sensedPositions.some(p => p.x === item.lastPosition!.x && p.y === item.lastPosition!.y)) return;
+            this.update(item.id, { ...item, lastPosition: null });
+        });
     }
 }
