@@ -27,11 +27,16 @@ export class Tracker<T> {
      * @param value the new value to store, preserving the existing seenAt
      * @returns void
      */
-    updateValue(key: string, value: T): void {
+    updateValuePreservingTimestamp(key: string, value: T): void {
+        // Get previous entry to preserve timestamp; if it doesn't exist, do nothing
         const existing = this.store.get(key);
         if (!existing) return;
+        
+        // Avoid memorizing intermediate positions
         const pos = (value as any)?.lastPosition;
         if (pos && (!Number.isInteger(pos.x) || !Number.isInteger(pos.y))) return;
+        
+        // Update the object with the new value, keeping old timestamp
         this.store.set(key, { value, seenAt: existing.seenAt });
     }
 

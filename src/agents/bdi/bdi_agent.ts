@@ -48,9 +48,10 @@ export class BDIAgent {
             if (this.debug) console.log("[PERCEIVE] Me status updated — pos: [", me.x, ", ", me.y, "]| score:", me.score, "]");
         });
 
-        // Set map information in beliefs once received
-        this.socket.on('map', (width: number, height: number, tiles: IOTile[]) => {
+        // Set map information in beliefs once received. These are only sent once!
+        this.socket.once('map', (width: number, height: number, tiles: IOTile[]) => {
             this.beliefs.map.updateMap(width, height, tiles);
+            if (this.debug) console.log("[PERCEIVE] Map info received — width:", width, "| height:", height, "| tiles:", tiles.length);
         });
 
         // Listen for sensing events
@@ -63,6 +64,7 @@ export class BDIAgent {
 
             // Update beliefs about crates based on the sensing event data
             this.beliefs.map.updateCrates(sensing.crates);
+            console.log(sensing.crates);
             
             if (this.debug) console.log(
                 "[PERCEIVE] Sensing update — agents:", sensing.agents.length,

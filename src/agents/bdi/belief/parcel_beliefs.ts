@@ -76,7 +76,7 @@ export class ParcelBeliefs {
                 continue;
             }
             // Update the reward without touching seenAt (preserves actual observation time)
-            this.parcels.updateValue(parcel.id, { ...parcel, reward: updatedReward });
+            this.parcels.updateValuePreservingTimestamp(parcel.id, { ...parcel, reward: updatedReward });
             // Advance the decay clock by exactly the intervals processed
             this.lastDecayApplied.set(parcel.id, lastDecay + ticks * decayInterval);
         }
