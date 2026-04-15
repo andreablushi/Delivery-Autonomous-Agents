@@ -13,6 +13,7 @@ export class BDIAgent {
     private debug: boolean;
     private beliefs: Beliefs;
     private intentions: Intentions;
+    private moving = false;
 
     /**
      * @param socket - The socket connection to the Deliveroo.js server.
@@ -80,7 +81,7 @@ export class BDIAgent {
                 console.log("  - Parcels:", this.beliefs.parcels.getCurrentParcels().length, "parcels");
                 console.log("  - Crates:", this.beliefs.map.getCurrentCrates().length, "crates");
             }
-            this.deliberate();
+            if (!this.moving) this.deliberate();
         });
     }
 
@@ -106,10 +107,14 @@ export class BDIAgent {
 
         const nextStep = this.intentions.getNextStep(me.lastPosition);
         if (nextStep === 'pickup') {
-            await this.socket.emit('pickup', []);
+            this.moving = true;
+            await this.socket.emitPickup();
+            this.moving = false;
             if (this.debug) console.log("[EXECUTE] Picking up parcel.");
         } else if (nextStep !== null) {
-            await this.socket.emit('move', nextStep);
+            this.moving = true;
+            await this.socket.emitMove(nextStep);
+            this.moving = false;
             if (this.debug) console.log("[EXECUTE] Moving to next step:", nextStep);
         } else {
             if (this.debug) console.log("[EXECUTE] No valid next step to execute.");

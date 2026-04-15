@@ -1,4 +1,4 @@
-import type { ExploreDesire, GetParcelDesire, DesireType } from "../../../models/desires.js";
+import type { ExploreDesire, ReachParcelDesire, DesireType } from "../../../models/desires.js";
 import type { Beliefs } from "../belief/beliefs.js";
 
 /**
@@ -9,12 +9,12 @@ import type { Beliefs } from "../belief/beliefs.js";
 export function generateDesires(beliefs: Beliefs): DesireType[] {
     const desires: DesireType[] = [];
     
-    // Try generating a GetParcelDesire first
-    const getParcel = generateGetParcelDesire(beliefs);
-    if (getParcel) {
-        desires.push(getParcel);
+    // Try generating a ReachParcelDesire first
+    const reachParcel = generateReachParcelDesire(beliefs);
+    if (reachParcel) {
+        desires.push(reachParcel);
     }
-    // If no GetParcelDesire was generated, fall back to generating an ExploreDesire
+    // If no ReachParcelDesire was generated, fall back to generating an ExploreDesire
     else {
         const explore = generateExploreDesire(beliefs);
         if (explore) desires.push(explore);
@@ -24,16 +24,16 @@ export function generateDesires(beliefs: Beliefs): DesireType[] {
 }
 
 /**
- * Generate a GetParcelDesire targeting the highest-reward available parcel.
+ * Generate a ReachParcelDesire targeting the highest-reward available parcel.
  * @param beliefs - The current beliefs of the agent
- * @returns A GetParcelDesire, or null if no parcels with known positions are available
+ * @returns A ReachParcelDesire, or null if no parcels with known positions are available
  */
-function generateGetParcelDesire(beliefs: Beliefs): GetParcelDesire | null {
+function generateReachParcelDesire(beliefs: Beliefs): ReachParcelDesire | null {
     //#TODO: reason about if we should generate a desire for all non picked up 
     // parcels, maybe considering the distance and the reward
     const best = beliefs.parcels.getBestRewardParcel();
     if (!best?.lastPosition) return null;
-    return { type: "GET_PARCEL", target: best.lastPosition, parcelId: best.id };
+    return { type: "REACH_PARCEL", target: { x: best.lastPosition.x, y: best.lastPosition.y } };
 }
 
 /**

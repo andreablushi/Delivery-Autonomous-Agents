@@ -24,6 +24,7 @@ function posToDirection(from: Position, to: Position): string {
 export class Intentions {
     private currentIntention: Intention | null = null;
     private desires: DesireType[] = [];
+    //#TODO: to be removed, and implemented in the desires
     private pendingPickup = false;
 
     /**
@@ -146,7 +147,7 @@ export class Intentions {
 
         // If the path is now empty after shifting, we can drop the intention
         if (this.currentIntention.path.length === 0) {
-            if (this.currentIntention.desire.type === "GET_PARCEL") {
+            if (this.currentIntention.desire.type === "REACH_PARCEL") {
                 this.pendingPickup = true;
             }
             this.currentIntention = null;
