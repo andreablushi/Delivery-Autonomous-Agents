@@ -5,6 +5,7 @@ import type { Position } from "../../../models/position.js";
 import type { IOTile, IOCrate } from "../../../models/djs.js";
 import { TILE_TYPE } from "../../../models/tile_type.js";
 import { Tracker } from "./utils/tracker.js";
+import { manhattanDistance } from "../../../utils/metrics.js";
 
 /**
  * Beliefs about the static map layout and dynamic crate positions.
@@ -26,28 +27,26 @@ export class MapBeliefs {
     }
 
     /**
-     * Update crate beliefs with the latest observed crates.
-     * @param crates Array of crates from the server, converted to internal Crates type and stored in memory.
-     * @param sensedPositions Array of positions that are currently sensed.
-     * @returns void
+     * Retrieve the tile at a given position, or null if the position is out of bounds or the map is not yet initialized.
+     * @param position The position to query for the tile.
+     * @returns The tile at the given position, or null if not found or map not initialized.
      */
-    updateCrates(sensedCrates: IOCrate[], sensedPositions: Position[]): void {
-        sensedCrates.forEach(crate => {
-            this.crates.update(crate.id, { id: crate.id, lastPosition: { x: crate.x, y: crate.y } });
-        });
-
-        // Invalidate lastPosition for crates not currently visible but whose last known position is in view
-        this.crates.invalidateAtSensedPositions(sensedCrates, sensedPositions);
+    getTileAt(position: Position): Tile | null {
+        if (!this.map) return null;
+        return this.map.tiles.find(t => t.x === position.x && t.y === position.y) || null;
     }
 
     /**
-     * Get the current believed positions of all crates.
-     * @returns An array of all crates with their current believed state
+     * Check if a given position is walkable (not a wall nor crate).
+     * @param position The position to check for walkability.
+     * @returns True if the position is walkable, false otherwise.
      */
-    getCurrentCrates(): Crate[] {
-        return this.crates.getCurrentAll();
+    isWalkable(position: Position): boolean {
+        const tile = this.getTileAt(position);
+        return tile !== null && tile.type !== TILE_TYPE.WALL;
+        //TODO: check for crates as well, but we also need to consider how sure we are about crate positions and whether we want to treat them as static obstacles or dynamic ones
     }
-
+    
     /** 
      * All parcel spawn tiles.
      * @return An array of spawn tiles
@@ -71,8 +70,8 @@ export class MapBeliefs {
         
         // Compute the Manhattan distance from the agent's position 
         const nearest = spawn.reduce((nearest, spawn) => {
-            const d = Math.abs(spawn.x - agentPos.x) + Math.abs(spawn.y - agentPos.y);
-            const nd = Math.abs(nearest.x - agentPos.x) + Math.abs(nearest.y - agentPos.y);
+            const d = manhattanDistance(spawn, agentPos);
+            const nd = manhattanDistance(nearest, agentPos);
             return d < nd ? spawn : nearest;
         }, spawn[0]);   // Start with the first spawn tile as the nearest
         return nearest;
@@ -84,6 +83,29 @@ export class MapBeliefs {
      */
     getDeliveryTiles(): Tile[] {
         return this.map?.tiles.filter(t => t.type === TILE_TYPE.DELIVERY_POINT) ?? [];
+    }
+
+    /**
+     * Update crate beliefs with the latest observed crates.
+     * @param crates Array of crates from the server, converted to internal Crates type and stored in memory.
+     * @param sensedPositions Array of positions that are currently sensed.
+     * @returns void
+     */
+    updateCrates(sensedCrates: IOCrate[], sensedPositions: Position[]): void {
+        sensedCrates.forEach(crate => {
+            this.crates.update(crate.id, { id: crate.id, lastPosition: { x: crate.x, y: crate.y } });
+        });
+
+        // Invalidate lastPosition for crates not currently visible but whose last known position is in view
+        this.crates.invalidateAtSensedPositions(sensedCrates, sensedPositions);
+    }
+
+    /**
+     * Get the current believed positions of all crates.
+     * @returns An array of all crates with their current believed state
+     */
+    getCurrentCrates(): Crate[] {
+        return this.crates.getCurrentAll();
     }
 
     /**
