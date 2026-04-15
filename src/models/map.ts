@@ -14,5 +14,5 @@ export type Tile = {
 export type GameMap = {
     width: number;   // Number of columns in the map grid
     height: number;  // Number of rows in the map grid
-    tiles: Tile[];   // Array of all tiles composing the map
+    tiles: TileType[][];  // Row-major 2D matrix; access as tiles[y][x]
 };
