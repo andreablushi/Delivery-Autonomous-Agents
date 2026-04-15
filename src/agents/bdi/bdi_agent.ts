@@ -50,7 +50,9 @@ export class BDIAgent {
 
         // Set map information in beliefs once received. These are only sent once!
         this.socket.once('map', (width: number, height: number, tiles: IOTile[]) => {
-            this.beliefs.map.updateMap(width, height, tiles);
+            //NOTE: currently the server for an NxM map sends width=N-1 and height=M-1, so we add 1 to both to get the correct dimensions.
+            // This is a temporary workaround until the server is fixed to send the correct dimensions.
+            this.beliefs.map.updateMap(width +1, height +1, tiles);
             if (this.debug) console.log("[PERCEIVE] Map info received — width:", width, "| height:", height, "| tiles:", tiles.length);
         });
 

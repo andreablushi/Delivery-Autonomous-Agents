@@ -3,7 +3,7 @@ import type { Agent } from "../../../models/agent.js";
 import type { Crate } from "../../../models/crate.js";
 import type { Position } from "../../../models/position.js";
 import type { IOTile, IOCrate } from "../../../models/djs.js";
-import { TILE_TYPE } from "../../../models/tile_type.js";
+import { TILE_TYPE, type TileType } from "../../../models/tile_type.js";
 import { Tracker } from "./utils/tracker.js";
 import { manhattanDistance } from "../../../utils/metrics.js";
 
@@ -13,17 +13,34 @@ import { manhattanDistance } from "../../../utils/metrics.js";
 export class MapBeliefs {
 
     private map: GameMap | null = null;             // Static map layout, set once at the start of the game
+    private spawnTiles: Tile[] = [];                // Precomputed on updateMap; map is static so this never changes
+    private deliveryTiles: Tile[] = [];             // Precomputed on updateMap; map is static so this never changes
     private crates = new Tracker<Crate>();          // Latest-only store; eviction is handled by MapBeliefs.evict()
-
+    
     /**
      * Initialize map beliefs from the given map info.
      * @param width Width of the map in tiles.
      * @param height Height of the map in tiles.
-     * @param tiles Initial array of tiles from the server, converted to internal Tile type.
+     * @param tiles Initial array of tiles from the server.
      * @returns void
      */
     updateMap(width: number, height: number, tiles: IOTile[]): void {
-        this.map = { width, height, tiles: tiles as Tile[] };
+        // Pre-fill with WALL so any tile absent from the server payload is treated as unwalkable
+        const matrix = Array.from({ length: height }, () =>
+            Array<TileType>(width).fill(TILE_TYPE.WALL)
+        );
+        for (const t of tiles) {
+            matrix[t.y][t.x] = t.type;
+        }
+        this.map = { width, height, tiles: matrix };
+
+        // Precompute static tile lists — map never changes after this point
+        this.spawnTiles = tiles
+            .filter(t => t.type === TILE_TYPE.SPAWN_POINT)
+            .map(t => ({ x: t.x, y: t.y, type: t.type }));
+        this.deliveryTiles = tiles
+            .filter(t => t.type === TILE_TYPE.DELIVERY_POINT)
+            .map(t => ({ x: t.x, y: t.y, type: t.type }));
     }
 
     /**
@@ -33,7 +50,10 @@ export class MapBeliefs {
      */
     getTileAt(position: Position): Tile | null {
         if (!this.map) return null;
-        return this.map.tiles.find(t => t.x === position.x && t.y === position.y) || null;
+        const { x, y } = position;
+        // Check bounds
+        if (y < 0 || y >= this.map.height || x < 0 || x >= this.map.width) return null;
+        return { x, y, type: this.map.tiles[y][x] };
     }
 
     /**
@@ -53,7 +73,7 @@ export class MapBeliefs {
      * @return An array of spawn tiles
      */
     getSpawnTiles(): Tile[] {
-        return this.map?.tiles.filter(t => t.type === TILE_TYPE.SPAWN_POINT) ?? [];
+        return this.spawnTiles;
     }
 
     /**
@@ -61,29 +81,37 @@ export class MapBeliefs {
      * @param agent The agent for which to find the nearest spawn tile.
      * @returns The nearest spawn tile, or null if no free spawn tiles are available.
      */
-    getNearestSpawnTile(agent : Agent): Tile {
-        // Get all spawn tiles (i.e. those not currently occupied by crates)
-        const spawn = this.getSpawnTiles();
-        // Find the nearest spawn tile to the agent's last known position
-        const agentPos = agent.lastPosition;
-        // If we don't know the agent's position, just return the first spawn tile
-        if (!agentPos) return spawn[0];   
-        
-        // Compute the Manhattan distance from the agent's position 
-        const nearest = spawn.reduce((nearest, spawn) => {
-            const d = manhattanDistance(spawn, agentPos);
-            const nd = manhattanDistance(nearest, agentPos);
-            return d < nd ? spawn : nearest;
-        }, spawn[0]);   // Start with the first spawn tile as the nearest
-        return nearest;
+    getNearestSpawnTile(agent: Agent): Tile {
+        return this.getNearestTile(this.spawnTiles, agent);
     }
 
-    /** 
+    /**
      * All parcel delivery tiles.
      * @return An array of delivery tiles
      */
     getDeliveryTiles(): Tile[] {
-        return this.map?.tiles.filter(t => t.type === TILE_TYPE.DELIVERY_POINT) ?? [];
+        return this.deliveryTiles;
+    }
+
+    /**
+     * Get the nearest delivery tile to the agent's last known position.
+     * @param agent The agent for which to find the nearest delivery tile.
+     * @returns The nearest delivery tile.
+     */
+    getNearestDeliveryTile(agent: Agent): Tile {
+        return this.getNearestTile(this.deliveryTiles, agent);
+    }
+
+    /**
+     * Return the tile in `tiles` closest to the agent's last known position.
+     * Falls back to the first tile if the agent position is unknown.
+     */
+    private getNearestTile(tiles: Tile[], agent: Agent): Tile {
+        const agentPos = agent.lastPosition;
+        if (!agentPos) return tiles[0];
+        return tiles.reduce((nearest, tile) => {
+            return manhattanDistance(tile, agentPos) < manhattanDistance(nearest, agentPos) ? tile : nearest;
+        }, tiles[0]);
     }
 
     /**
@@ -125,11 +153,11 @@ export class MapBeliefs {
             { x, y: y + 1 },
         ];
         // Filter the adjacent positions to only include those that are valid crate spaces (i.e. not walls or occupied by other crates)
-        return neighbours.filter(pos =>
-            this.map!.tiles.some(t =>
-                t.type === TILE_TYPE.CRATE_SPACE &&
-                t.x === pos.x && t.y === pos.y)
-        );
+        return neighbours.filter(pos => {
+            const { x: nx, y: ny } = pos;
+            if (ny < 0 || ny >= this.map!.height || nx < 0 || nx >= this.map!.width) return false;
+            return this.map!.tiles[ny][nx] === TILE_TYPE.CRATE_SPACE;
+        });
     }
 
 }

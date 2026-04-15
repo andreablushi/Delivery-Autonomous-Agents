@@ -42,6 +42,8 @@ function generateGetParcelDesire(beliefs: Beliefs): GetParcelDesire | null {
  * @returns An ExploreDesire with a target spawn tile
  */
 function generateExploreDesire(beliefs: Beliefs): ExploreDesire | null {
+    //#TODO: instead of reaching the nearest spawn tile, we could consider reaching the spawn tile with the most
+    // observable area around it
     const nearestSpawnTile = beliefs.map.getNearestSpawnTile(beliefs.agents.getCurrentMe()!);
     if (!nearestSpawnTile) return null;
     return { type: "EXPLORE", target: { x: nearestSpawnTile.x, y: nearestSpawnTile.y } };

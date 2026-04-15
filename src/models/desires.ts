@@ -17,6 +17,7 @@ export type GetParcelDesire = {
     parcelId: string;       // ID of the parcel to collect
 };
 
+/*
 export type PickupParcelDesire = {
     type: "PICKUP_PARCEL";  // The agent wants to pick up a parcel it is currently on
     parcelId: string;       // ID of the parcel to pick up
@@ -27,6 +28,6 @@ export type DeliverParcelDesire = {
     tartget: Position;      // Delivery target position 
     parcelId: string;       // ID of the parcel to deliver
 };
-
+*/
 // Union type for all possible desires that the agent can have based on its beliefs
-export type DesireType = ExploreDesire | GetParcelDesire | PickupParcelDesire | DeliverParcelDesire;
+export type DesireType = ExploreDesire | GetParcelDesire /**| PickupParcelDesire | DeliverParcelDesire*/;
