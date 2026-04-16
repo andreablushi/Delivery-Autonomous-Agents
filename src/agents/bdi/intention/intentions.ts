@@ -3,6 +3,7 @@ import type { Beliefs } from "../belief/beliefs.js";
 import type { DesireType } from "../../../models/desires.js";
 import type { Intention } from "../../../models/intentions.js";
 import type { Position } from "../../../models/position.js";
+import { getBestDesire } from "../desire/desire_filter.js";
 
 /**
  * Given the current position and a target position, computes the direction of next step
@@ -48,13 +49,13 @@ export class Intentions {
         if (!me?.lastPosition) return;
 
         // Validate current intention and plan
-        if (!this.validateCurrentIntention() || !this.validatePath(beliefs)) {
+        if (!this.validateCurrentIntention(beliefs) || !this.validatePath(beliefs)) {
             this.currentIntention = null;
         }
 
         // Replan if no valid intention
         if (!this.currentIntention || this.currentIntention.path.length === 0) {
-            this.currentIntention = { desire: this.selectBestDesire(this.desires), path: [] };
+            this.currentIntention = { desire: getBestDesire(this.desires, beliefs), path: [] };
             this.plan(beliefs);
         }
     }
@@ -63,12 +64,12 @@ export class Intentions {
      * Validates if the current intention is still valid based on the current desires and beliefs.
      * @returns true if the current intention is still valid, false otherwise.
      */
-    private validateCurrentIntention(): boolean {
+    private validateCurrentIntention(beliefs: Beliefs): boolean {
         // If there is no current intention, it's not valid
         if (!this.currentIntention) return false;
 
         // Check if the desire of the current intention is still the top desire
-        const topDesire = this.selectBestDesire(this.desires);
+        const topDesire = getBestDesire(this.desires, beliefs);
         const d = this.currentIntention.desire;
         if (
             d.type !== topDesire.type ||
@@ -110,21 +111,6 @@ export class Intentions {
         }
         // Update the current intention with the new path
         this.currentIntention.path = path;
-    }
-
-    /**
-     * Selects the best desire from the list of desires. 
-     * @param desires - The current desires of the agent.
-     * @returns 
-     */
-    private selectBestDesire(desires: DesireType[]): DesireType {
-        //#TODO: move the selection mechanism to the desire filter, so that we already have a filtered and sorted list of desires here in the intention manager, 
-        // and we just take the first one
-
-
-        // For simplicity, we take the first desire of the array
-        //#TODO: implement a better selection mechanism based on the type of desire and distance
-        return desires[0];
     }
 
     /**

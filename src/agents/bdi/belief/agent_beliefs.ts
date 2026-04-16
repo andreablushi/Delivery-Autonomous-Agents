@@ -13,6 +13,7 @@ import { Tracker } from "./utils/tracker.js";
 export class AgentBeliefs {
 
     private me: Agent | null = null;                        // Current self-belief, updated directly from observations, without memory
+    //#TODO: Create a memory for me to create an heatmap of where I have been for the EXPLORE beliefs
     private friends = new Tracker<Agent>();                 // Tracker of friend agents, keyed by ID, without memory
     private enemies = new Tracker<Agent>();                 // Tracker of enemy agents, keyed by ID, keeping only the latest observation for each enemy, without memory
     private enemiesMemory = new Memory<Agent>(1_000, 10);   // Memory of enemy agents, keyed by ID, with TTL-based eviction
@@ -85,6 +86,14 @@ export class AgentBeliefs {
      */
     getCurrentMe(): Agent | null {
         return this.me;
+    }
+
+    /**
+     * Get the observation distance from the player settings.
+     * @returns The observation distance in tiles, or null if settings are not yet received.
+     */
+    getObservationDistance(): number | null {
+        return this.playerSettings?.observation_distance ?? null;
     }
 
     /**

@@ -1,7 +1,6 @@
 import type { Beliefs } from "../belief/beliefs.js";
 import type { DesireType } from "../../../models/desires.js";
 import { generateDesires } from "./desire_generator.js";
-import { filterDesires } from "./desire_filter.js";
 
 /**
  * Get desires based on the current beliefs of the agent.
@@ -11,5 +10,5 @@ import { filterDesires } from "./desire_filter.js";
  */
 export function getDesires(beliefs: Beliefs): DesireType[] {
     const desires = generateDesires(beliefs);
-    return filterDesires(desires);
+    return desires
 }

@@ -19,10 +19,9 @@ export function generateDesires(beliefs: Beliefs): DesireType[] {
     if (reachParcel) {
         desires.push(reachParcel);
     }
-    // If no ReachParcelDesire was generated, fall back to generating an ExploreDesire
+    // If no ReachParcelDesire was generated, fall back to generating an ExploreDesire per spawn tile
     else {
-        const explore = generateExploreDesire(beliefs);
-        if (explore) desires.push(explore);
+        desires.push(...generateExploreDesires(beliefs));
     }
     return desires;
 }
@@ -56,15 +55,14 @@ function generateDeliverDesire(beliefs: Beliefs): DeliverParcelDesire | null {
 }
 
 /**
- * Generate an ExploreDesire targeting the nearest spawn tile.
+ * Generate one ExploreDesire per spawn tile.
  * @param beliefs - The current beliefs of the agent
- * @returns An ExploreDesire with a target spawn tile
+ * @returns An array of ExploreDesire, one for each known spawn tile
  */
-function generateExploreDesire(beliefs: Beliefs): ExploreDesire | null {
-    //#TODO: instead of reaching the nearest spawn tile, we could consider reaching the spawn tile with the most
-    // observable area around it
-    const nearestSpawnTile = beliefs.map.getNearestSpawnTile(beliefs.agents.getCurrentMe()!);
-    if (!nearestSpawnTile) return null;
-    return { type: "EXPLORE", target: { x: nearestSpawnTile.x, y: nearestSpawnTile.y } };
+function generateExploreDesires(beliefs: Beliefs): ExploreDesire[] {
+    return beliefs.map.getSpawnTiles().map(tile => ({
+        type: "EXPLORE" as const,
+        target: { x: tile.x, y: tile.y },
+    }));
 }
 
