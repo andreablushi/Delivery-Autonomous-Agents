@@ -20,11 +20,12 @@ export type ReachParcelDesire = {
 export type PickupParcelDesire = {
     type: "PICKUP_PARCEL";  // The agent wants to pick up a parcel it is currently on
 };
+*/
 
 export type DeliverParcelDesire = {
     type: "DELIVER_PARCEL"; // The agent wants to deliver a parcel it is currently carrying
-    target: Position;      // Delivery target position 
+    target: Position;       // Nearest delivery tile position
 };
-*/
+
 // Union type for all possible desires that the agent can have based on its beliefs
-export type DesireType = ExploreDesire | ReachParcelDesire /**| PickupParcelDesire | DeliverParcelDesire*/;
+export type DesireType = ExploreDesire | ReachParcelDesire | DeliverParcelDesire;

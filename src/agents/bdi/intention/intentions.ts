@@ -26,6 +26,7 @@ export class Intentions {
     private desires: DesireType[] = [];
     //#TODO: to be removed, and implemented in the desires
     private pendingPickup = false;
+    private pendingPutdown = false;
 
     /**
      * Called each deliberation cycle.
@@ -138,6 +139,12 @@ export class Intentions {
             return 'pickup';
         }
 
+        // Emit putdown on the cycle after arriving at a delivery tile
+        if (this.pendingPutdown) {
+            this.pendingPutdown = false;
+            return 'putdown';
+        }
+
         // If there is no current intention or the path is empty, we cannot move
         if (!this.currentIntention || this.currentIntention.path.length === 0) return null;
 
@@ -149,6 +156,8 @@ export class Intentions {
         if (this.currentIntention.path.length === 0) {
             if (this.currentIntention.desire.type === "REACH_PARCEL") {
                 this.pendingPickup = true;
+            } else if (this.currentIntention.desire.type === "DELIVER_PARCEL") {
+                this.pendingPutdown = true;
             }
             this.currentIntention = null;
         }

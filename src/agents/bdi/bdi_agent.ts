@@ -111,6 +111,13 @@ export class BDIAgent {
             await this.socket.emitPickup();
             this.moving = false;
             if (this.debug) console.log("[EXECUTE] Picking up parcel.");
+        } else if (nextStep === 'putdown') {
+            this.moving = true;
+            await this.socket.emitPutdown();
+            this.moving = false;
+            const me_parcels = this.beliefs.parcels.getCarriedByAgent(me.id);
+            this.beliefs.parcels.cleanDeliveredParcels(me_parcels);
+            if (this.debug) console.log("[EXECUTE] Delivering parcel.");
         } else if (nextStep !== null) {
             this.moving = true;
             await this.socket.emitMove(nextStep);

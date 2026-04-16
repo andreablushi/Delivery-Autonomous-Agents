@@ -140,4 +140,17 @@ export class ParcelBeliefs {
         if (!free.length) return null;
         return free.reduce((best, p) => p.reward > best.reward ? p : best);
     }
+
+    /**
+     * Remove parcels from beliefs that are known to have been delivered based on a list of delivered parcel IDs.
+     * @param deliveredParcels An array of parcels that have been delivered, used to clean up beliefs by removing them from memory. 
+     * @returns void
+     */
+    cleanDeliveredParcels(deliveredParcels: Parcel[]): void {
+        const deliveredParcelIds = deliveredParcels.map(p => p.id);
+        deliveredParcelIds.forEach(id => {
+            this.parcels.delete(id);
+            this.lastDecayApplied.delete(id);
+        });
+    }   
 }

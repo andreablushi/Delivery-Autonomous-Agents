@@ -1,4 +1,4 @@
-import type { ExploreDesire, ReachParcelDesire, DesireType } from "../../../models/desires.js";
+import type { ExploreDesire, ReachParcelDesire, DeliverParcelDesire, DesireType } from "../../../models/desires.js";
 import type { Beliefs } from "../belief/beliefs.js";
 
 /**
@@ -8,8 +8,13 @@ import type { Beliefs } from "../belief/beliefs.js";
  */
 export function generateDesires(beliefs: Beliefs): DesireType[] {
     const desires: DesireType[] = [];
-    
-    // Try generating a ReachParcelDesire first
+    // Delivery is highest priority: if carrying parcels, go deliver
+    const deliver = generateDeliverDesire(beliefs);
+    if (deliver) {
+        desires.push(deliver);
+        return desires; // If we have a delivery desire, we don't need to consider other desires
+    }
+    // Try generating a ReachParcelDesire next
     const reachParcel = generateReachParcelDesire(beliefs);
     if (reachParcel) {
         desires.push(reachParcel);
@@ -19,7 +24,6 @@ export function generateDesires(beliefs: Beliefs): DesireType[] {
         const explore = generateExploreDesire(beliefs);
         if (explore) desires.push(explore);
     }
-
     return desires;
 }
 
@@ -34,6 +38,21 @@ function generateReachParcelDesire(beliefs: Beliefs): ReachParcelDesire | null {
     const best = beliefs.parcels.getBestRewardParcel();
     if (!best?.lastPosition) return null;
     return { type: "REACH_PARCEL", target: { x: best.lastPosition.x, y: best.lastPosition.y } };
+}
+
+/**
+ * Generate a DeliverParcelDesire targeting the nearest delivery tile, if the agent is carrying parcels.
+ * @param beliefs - The current beliefs of the agent
+ * @returns A DeliverParcelDesire, or null if the agent is not carrying any parcels
+ */
+function generateDeliverDesire(beliefs: Beliefs): DeliverParcelDesire | null {
+    const me = beliefs.agents.getCurrentMe();
+    if (!me) return null;
+    const carried = beliefs.parcels.getCarriedByAgent(me.id);
+    if (carried.length === 0) return null;
+    const tile = beliefs.map.getNearestDeliveryTile(me);
+    if (!tile) return null;
+    return { type: "DELIVER_PARCEL", target: { x: tile.x, y: tile.y } };
 }
 
 /**
