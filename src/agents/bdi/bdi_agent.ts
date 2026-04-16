@@ -1,6 +1,6 @@
 import { IOConfig, IOTile, IOAgent, IOSensing } from "../../models/djs.js";
 import { Beliefs } from "./belief/beliefs.js";
-import { getDesires } from "./desire/desires.js";
+import { generateDesires } from "./desire/desire_generator.js";
 import { Intentions } from "./intention/intentions.js";
 import type { DesireType, NavigationDesire } from "../../models/desires.js";
 
@@ -91,7 +91,7 @@ export class BDIAgent {
      * On each sensing cycle: validate the current plan, replan if needed, then execute one step.
      */
     deliberate() {
-        const desires = getDesires(this.beliefs);
+        const desires = generateDesires(this.beliefs);
         if (this.debug) console.log("[DELIBERATE] Desires:", desires);
         // Action desires have no navigation target — keep them out of the intention planner
         const navDesires = desires.filter((d): d is NavigationDesire => d.type !== 'PICKUP_PARCEL' && d.type !== 'PUTDOWN_PARCEL');
