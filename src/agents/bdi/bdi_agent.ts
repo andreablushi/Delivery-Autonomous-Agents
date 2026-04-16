@@ -2,6 +2,7 @@ import { IOConfig, IOTile, IOAgent, IOSensing } from "../../models/djs.js";
 import { Beliefs } from "./belief/beliefs.js";
 import { getDesires } from "./desire/desires.js";
 import { Intentions } from "./intention/intentions.js";
+import type { DesireType, NavigationDesire } from "../../models/desires.js";
 
 /**
  * BDI Agent Implementation
@@ -92,33 +93,38 @@ export class BDIAgent {
     deliberate() {
         const desires = getDesires(this.beliefs);
         if (this.debug) console.log("[DELIBERATE] Desires:", desires);
-
-        this.intentions.update(this.beliefs, desires);
-
-        this.execute();
+        // Action desires have no navigation target — keep them out of the intention planner
+        const navDesires = desires.filter((d): d is NavigationDesire => d.type !== 'PICKUP_PARCEL' && d.type !== 'PUTDOWN_PARCEL');
+        this.intentions.update(this.beliefs, navDesires);
+        this.execute(desires[0]);
     }
 
     /**
      * Execute one step of the current intention by emitting a move to the socket.
      */
-    async execute() {
+    async execute(topDesire?: DesireType) {
         const me = this.beliefs.agents.getCurrentMe();
         if (!me?.lastPosition) return;
 
-        const nextStep = this.intentions.getNextStep(me.lastPosition);
-        if (nextStep === 'pickup') {
+        if (topDesire?.type === 'PICKUP_PARCEL') {
             this.moving = true;
             await this.socket.emitPickup();
             this.moving = false;
             if (this.debug) console.log("[EXECUTE] Picking up parcel.");
-        } else if (nextStep === 'putdown') {
+            return;
+        }
+
+        if (topDesire?.type === 'PUTDOWN_PARCEL') {
             this.moving = true;
             await this.socket.emitPutdown();
             this.moving = false;
-            const me_parcels = this.beliefs.parcels.getCarriedByAgent(me.id);
-            this.beliefs.parcels.cleanDeliveredParcels(me_parcels);
+            this.beliefs.parcels.cleanDeliveredParcels(this.beliefs.parcels.getCarriedByAgent(me.id));
             if (this.debug) console.log("[EXECUTE] Delivering parcel.");
-        } else if (nextStep !== null) {
+            return;
+        }
+
+        const nextStep = this.intentions.getNextStep(me.lastPosition);
+        if (nextStep !== null) {
             this.moving = true;
             await this.socket.emitMove(nextStep);
             this.moving = false;

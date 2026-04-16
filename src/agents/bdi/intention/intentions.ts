@@ -1,6 +1,6 @@
 import { aStar } from "../navigation/a_star.js";
 import type { Beliefs } from "../belief/beliefs.js";
-import type { DesireType } from "../../../models/desires.js";
+import type { NavigationDesire } from "../../../models/desires.js";
 import type { Intention } from "../../../models/intentions.js";
 import type { Position } from "../../../models/position.js";
 import { getBestDesire } from "../desire/desire_filter.js";
@@ -24,10 +24,7 @@ function posToDirection(from: Position, to: Position): string {
  */
 export class Intentions {
     private currentIntention: Intention | null = null;
-    private desires: DesireType[] = [];
-    //#TODO: to be removed, and implemented in the desires
-    private pendingPickup = false;
-    private pendingPutdown = false;
+    private desires: NavigationDesire[] = [];
 
     /**
      * Called each deliberation cycle.
@@ -35,7 +32,7 @@ export class Intentions {
      * @param beliefs - The current beliefs of the agent.
      * @param desires - The current desires of the agent
      */
-    update(beliefs: Beliefs, desires: DesireType[]): void {
+    update(beliefs: Beliefs, desires: NavigationDesire[]): void {
         // If no desires, drop current intention
         if (desires.length === 0) {
             this.currentIntention = null;
@@ -119,32 +116,12 @@ export class Intentions {
       * @returns The next direction to move ('up', 'down', 'left', 'right') or null if no intention or path is available.
      */
     getNextStep(from: { x: number; y: number }): string | null {
-        // Emit pickup on the cycle after arriving at a parcel
-        if (this.pendingPickup) {
-            this.pendingPickup = false;
-            return 'pickup';
-        }
-
-        // Emit putdown on the cycle after arriving at a delivery tile
-        if (this.pendingPutdown) {
-            this.pendingPutdown = false;
-            return 'putdown';
-        }
-
-        // If there is no current intention or the path is empty, we cannot move
         if (!this.currentIntention || this.currentIntention.path.length === 0) return null;
 
-        // Get the next step from the path
         const next = this.currentIntention.path.shift()!;
         const direction = posToDirection(from, next);
 
-        // If the path is now empty after shifting, we can drop the intention
         if (this.currentIntention.path.length === 0) {
-            if (this.currentIntention.desire.type === "REACH_PARCEL") {
-                this.pendingPickup = true;
-            } else if (this.currentIntention.desire.type === "DELIVER_PARCEL") {
-                this.pendingPutdown = true;
-            }
             this.currentIntention = null;
         }
         return direction;

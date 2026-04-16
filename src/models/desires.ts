@@ -16,16 +16,21 @@ export type ReachParcelDesire = {
     target: Position;       // Last known position of the target parcel
 };
 
-/*
 export type PickupParcelDesire = {
-    type: "PICKUP_PARCEL";  // The agent wants to pick up a parcel it is currently on
+    type: "PICKUP_PARCEL";  // The agent wants to pick up a parcel it is currently standing on
 };
-*/
 
 export type DeliverParcelDesire = {
-    type: "DELIVER_PARCEL"; // The agent wants to deliver a parcel it is currently carrying
+    type: "DELIVER_PARCEL"; // The agent wants to navigate to the nearest delivery tile
     target: Position;       // Nearest delivery tile position
 };
 
+export type PutdownParcelDesire = {
+    type: "PUTDOWN_PARCEL"; // The agent wants to put down parcels it is currently standing on a delivery tile
+};
+
+// Desires that require navigation — always have a `target` position
+export type NavigationDesire = ExploreDesire | ReachParcelDesire | DeliverParcelDesire;
+
 // Union type for all possible desires that the agent can have based on its beliefs
-export type DesireType = ExploreDesire | ReachParcelDesire | DeliverParcelDesire;
+export type DesireType = NavigationDesire | PickupParcelDesire | PutdownParcelDesire;

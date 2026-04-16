@@ -1,5 +1,5 @@
 import type { Beliefs } from "../belief/beliefs.js";
-import type { DesireType, ExploreDesire } from "../../../models/desires.js";
+import type { NavigationDesire, ExploreDesire } from "../../../models/desires.js";
 import { manhattanDistance } from "../../../utils/metrics.js";
 
 /**
@@ -8,8 +8,8 @@ import { manhattanDistance } from "../../../utils/metrics.js";
  * @param beliefs - The current beliefs of the agent, used to contextualise filtering
  * @returns A filtered array of DesireType with duplicates removed based on the desire type.
  */
-export function getBestDesire(desires: DesireType[], beliefs: Beliefs): DesireType {
-    let  bestDesire : DesireType 
+export function getBestDesire(desires: NavigationDesire[], beliefs: Beliefs): NavigationDesire {
+    let bestDesire: NavigationDesire
     const seen = new Set<string>();
 
     // Filter ExploreDesires

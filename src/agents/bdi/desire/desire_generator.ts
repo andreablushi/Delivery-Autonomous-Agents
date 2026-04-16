@@ -1,4 +1,4 @@
-import type { ExploreDesire, ReachParcelDesire, DeliverParcelDesire, DesireType } from "../../../models/desires.js";
+import type { ExploreDesire, ReachParcelDesire, PickupParcelDesire, PutdownParcelDesire, DeliverParcelDesire, DesireType } from "../../../models/desires.js";
 import type { Beliefs } from "../belief/beliefs.js";
 
 /**
@@ -7,23 +7,66 @@ import type { Beliefs } from "../belief/beliefs.js";
  * @returns An array of DesireType representing the potential desires generated from the beliefs.
  */
 export function generateDesires(beliefs: Beliefs): DesireType[] {
-    const desires: DesireType[] = [];
-    // Delivery is highest priority: if carrying parcels, go deliver
-    const deliver = generateDeliverDesire(beliefs);
-    if (deliver) {
-        desires.push(deliver);
-        return desires; // If we have a delivery desire, we don't need to consider other desires
-    }
-    // Try generating a ReachParcelDesire next
+    //TODO: currenltly, only the desire for one type are being generated
+    // but probably, we should generate all the possible desires and then filter them in the desire filter
+
+    // Pickup: highest priority — agent is standing on a parcel
+    const pickup = generatePickupDesire(beliefs);
+    if (pickup) return [pickup];
+
+    // Putdown: agent is at a delivery tile and carrying parcels
+    const putdown = generatePutdownDesire(beliefs);
+    if (putdown) return [putdown];
+
+    // Reach: a parcel is visible
     const reachParcel = generateReachParcelDesire(beliefs);
-    if (reachParcel) {
-        desires.push(reachParcel);
-    }
-    // If no ReachParcelDesire was generated, fall back to generating an ExploreDesire per spawn tile
-    else {
-        desires.push(...generateExploreDesires(beliefs));
-    }
-    return desires;
+    if (reachParcel) return [reachParcel];
+
+    // Deliver: agent is carrying parcels but not yet at a delivery tile
+    const deliver = generateDeliverDesire(beliefs);
+    if (deliver) return [deliver];
+
+    // Explore: fallback
+    return generateExploreDesires(beliefs);
+}
+
+/**
+ * Generate a PickupParcelDesire if the agent is standing on an available parcel.
+ */
+function generatePickupDesire(beliefs: Beliefs): PickupParcelDesire | null {
+    // Get current agent position from beliefs
+    const me = beliefs.agents.getCurrentMe();
+    if (!me?.lastPosition) return null;
+    const ax = me.lastPosition.x;
+    const ay = me.lastPosition.y;
+
+    // Check if any available parcel is at the agent's current position
+    const onParcel = beliefs.parcels.getAvailableParcels().some(
+        parcel => parcel.lastPosition &&
+            Math.round(parcel.lastPosition.x) === ax && 
+            Math.round(parcel.lastPosition.y) === ay
+    );
+    return onParcel ? { type: "PICKUP_PARCEL" } : null;
+}
+
+/**
+ * Generate a PutdownParcelDesire if the agent is standing on a delivery tile while carrying parcels.
+ */
+function generatePutdownDesire(beliefs: Beliefs): PutdownParcelDesire | null {
+    // Get current agent position from beliefs
+    const me = beliefs.agents.getCurrentMe();
+    if (!me?.lastPosition) return null;
+    const ax = me.lastPosition.x;
+    const ay = me.lastPosition.y;
+
+    // Check if the agent is carrying any parcels
+    const carried = beliefs.parcels.getCarriedByAgent(me.id);
+    if (carried.length === 0) return null;
+
+    // Check if the agent is currently on a delivery tile
+    const atDelivery = beliefs.map.getDeliveryTiles().some(
+        tile => tile.x === ax && tile.y === ay);
+    return atDelivery ? { type: "PUTDOWN_PARCEL" } : null;
 }
 
 /**
