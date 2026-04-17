@@ -10,8 +10,8 @@ body:
       value: |
         Use labels with the prefix system:
         - type:todo 
-        - area:backend, area:frontend or area:documentation
-        - priority:low or priority:high
+        - area:bdi, area:llm or area:documentation
+        - priority:low or priority:medium or priority:high
 
   - type: dropdown
     id: area
@@ -19,8 +19,8 @@ body:
       label: Area
       description: Choose the main area for this todo.
       options:
-        - backend
-        - frontend
+        - bdi
+        - llm
         - documentation
     validations:
       required: true
@@ -32,6 +32,7 @@ body:
       description: Choose the priority.
       options:
         - low
+        - medium
         - high
     validations:
       required: true

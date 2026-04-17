@@ -8,17 +8,17 @@ body:
     attributes:
       value: |
         Use labels with the prefix system:
-        - type:bug (automatically applied)
-        - area:backend or area:frontend (add manually)
-        - priority:low or priority:high (add manually)
+        - type:bug 
+        - area:bdi or area:llm 
+        - priority:low or priority:medium or priority:high
 
   - type: dropdown
     id: area
     attributes:
       label: Area
       options:
-        - backend
-        - frontend
+        - bdi
+        - llm
     validations:
       required: true
 
@@ -28,6 +28,7 @@ body:
       label: Priority
       options:
         - low
+        - medium
         - high
     validations:
       required: true
