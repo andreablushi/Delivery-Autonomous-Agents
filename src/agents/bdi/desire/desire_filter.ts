@@ -138,8 +138,8 @@ function scoreDeliverDesire(
 }
 
 /**
- * Select the best ExploreDesire using visit-time scoring: score = age / (distance + 1).
- * Never-visited tiles score Infinity and always win. Among visited tiles, older and closer tiles score higher.
+ * Select the best ExploreDesire using sensing-time scoring: score = age / (distance + 1).
+ * Never-sensed tiles score Infinity and always win. Among sensed tiles, older and closer tiles score higher.
  * Candidates are pre-filtered to those outside the agent's observation range; falls back to all tiles if none qualify.
  */
 export function filterExplore(
@@ -158,14 +158,14 @@ export function filterExplore(
 }
 
 /**
- * Score an ExploreDesire based on how long it's been since the target tile was last visited, 
+ * Score an ExploreDesire based on how long it's been since the target tile was last sensed, 
  * adjusted for distance: score = age / (distance + 1).
- * Tiles that have never been visited score Infinity and will always be chosen over visited tiles.
- * Among visited tiles, those that haven't been visited for a long time and are closer will score higher.
+ * Tiles that have never been sensed score Infinity and will always be chosen over sensed tiles.
+ * Among sensed tiles, those that haven't been sensed for a long time and are closer will score higher.
  * @param desire The ExploreDesire to score, containing the target tile position.
  * @param agentPos The current position of the agent, used to calculate distance. If null, the desire will score 0.
- * @param mapBeliefs The agent's beliefs about the map, used to look up the last visit time for the target tile.
- * @param now The current timestamp, used to calculate the age of the last visit.
+ * @param mapBeliefs The agent's beliefs about the map, used to look up the last sensing time for the target tile.
+ * @param now The current timestamp, used to calculate the age of the last sensing.
  * @returns A numeric score representing the desirability of exploring the target tile, where higher is better.
  */
 function scoreExplore(
@@ -174,10 +174,12 @@ function scoreExplore(
     mapBeliefs: MapBeliefs,
     now: number
 ): number {
-    // Get spawn tile distance and age since last visit
+    // Get spawn tile distance and age since last sensing
     const distance = manhattanDistance(desire.target, agentPos);
-    const lastVisit = mapBeliefs.getSpawnTileVisitTime(desire.target);
-    const age = lastVisit !== undefined ? now - lastVisit : Infinity;
+    const lastSensing = mapBeliefs.getSpawnTilesSensingTime(desire.target);
+    // If the tile has never been sensed, assign it an infinite score to prioritize it above all else. 
+    // Otherwise, calculate the score based on age and distance.
+    const age = lastSensing !== undefined ? now - lastSensing : Infinity;
 
     return age / (distance + 1);
 }

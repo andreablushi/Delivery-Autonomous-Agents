@@ -14,7 +14,8 @@ export class MapBeliefs {
     private deliveryTiles: Tile[] = [];              // Precomputed on updateMap; map is static so this never changes
     
     private crates = new Tracker<Crate>();                           // Latest-only store; eviction is handled by MapBeliefs.evict()
-    private spawnTilesSensingTimes = new Map<Position, number>();    // Keep track of when spawn tiles were last sensed, keyed as "x,y"
+    private spawnTilesSensingTimes = new Map<string, number>();      // Keep track of when spawn tiles were last sensed, keyed as "x,y"
+
     
     /**
      * Initialize map beliefs from the given map info.
@@ -74,27 +75,27 @@ export class MapBeliefs {
     }
 
     /**
-     * Update the visit times for all spawn tiles based on the positions sensed.
+     * Update the sensing times for all spawn tiles based on the positions sensed.
      * @param sensedPositions Array of positions that are currently sensed.
-     * @param currentTime The current time to update the visit times.
+     * @param currentTime The current time to update the sensing times.
      */
-    updateSpawnTilesVisitTimes(sensedPositions: Position[], currentTime: number): void {
-        // For each sensed position, if it's a spawn tile, update its last visit time
+    updateSpawnTilesSensingTimes(sensedPositions: Position[], currentTime: number): void {
+        // For each sensed position, if it's a spawn tile, update its last sensing time
         sensedPositions.forEach(position => {
             const tile = this.getTileAt(position);
             if (tile && tile.type === TILE_TYPE.SPAWN_POINT) {
-                this.spawnTilesSensingTimes.set(position, currentTime);
+                this.spawnTilesSensingTimes.set(`${position.x},${position.y}`, currentTime);
             }
         });
     }
 
     /**
-     * Get the last visit time for a given spawn tile position, or undefined if it has never been visited.
+     * Get the last sensing time for a given spawn tile position, or undefined if it has never been sensed.
      * @param position The position of the spawn tile to query.
-     * @returns The timestamp of the last visit to the spawn tile, or undefined if never visited.
+     * @returns The timestamp of the last sensing of the spawn tile, or undefined if never sensed.
      */
-    getSpawnTileVisitTime(position: Position): number | undefined {
-        return this.spawnTilesSensingTimes.get(position);
+    getSpawnTilesSensingTime(position: Position): number | undefined {
+        return this.spawnTilesSensingTimes.get(`${position.x},${position.y}`);
     }
     /**
      * All parcel delivery tiles.
