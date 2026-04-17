@@ -8,6 +8,7 @@ import type {
     GeneratedDesires,
 } from "../../../models/desires.js";
 import { manhattanDistance } from "../../../utils/metrics.js";
+import { MapBeliefs } from "../belief/map_beliefs.js";
 
 /**
  * Select the top desire out of all candidates generated this cycle.
@@ -46,7 +47,7 @@ export function getBestDesire(desires: GeneratedDesires, beliefs: Beliefs): Desi
     return filterExplore(
         explores,
         beliefs.agents.getCurrentMe()?.lastPosition ?? null,
-        beliefs.agents.getObservationDistance(),
+        beliefs.map
     );
 }
 
@@ -122,7 +123,10 @@ function scoreReachDesire(desire: ReachParcelDesire, beliefs: Beliefs): number {
  * Falls back to 0 when the agent position is unknown or nothing is being carried.
  * Basic heuristic — replace this function to improve goal selection in the future.
  */
-function scoreDeliverDesire(desire: DeliverParcelDesire, beliefs: Beliefs): number {
+function scoreDeliverDesire(
+    desire: DeliverParcelDesire, 
+    beliefs: Beliefs
+): number {
     const me = beliefs.agents.getCurrentMe();
     if (!me?.lastPosition) return 0;
 
@@ -134,23 +138,46 @@ function scoreDeliverDesire(desire: DeliverParcelDesire, beliefs: Beliefs): numb
 }
 
 /**
- * Select the best ExploreDesire: the nearest spawn tile outside the agent's observation range.
- * Falls back to the nearest overall if all spawn tiles are within range.
- * @param explores - All generated ExploreDesires
- * @param agentPos - The agent's current position, or null if unknown
- * @param observationDistance - The agent's observation radius in tiles, or null if unknown
- * @returns The selected ExploreDesire, or null if there are no candidates
+ * Select the best ExploreDesire using visit-time scoring: score = age / (distance + 1).
+ * Never-visited tiles score Infinity and always win. Among visited tiles, older and closer tiles score higher.
+ * Candidates are pre-filtered to those outside the agent's observation range; falls back to all tiles if none qualify.
  */
-export function filterExplore(explores: ExploreDesire[], agentPos: { x: number; y: number } | null, observationDistance: number | null,): ExploreDesire {
-    // Assumes always possible to explore
-    if (!agentPos || observationDistance === null) return explores[0];
-    // Manage ExploreDesires by prioritising the nearest spawn tile that is outside the agent's current observation range
-    const outOfRange = explores.filter(
-        d => manhattanDistance(d.target, agentPos) > observationDistance,
+export function filterExplore(
+    explores: ExploreDesire[],
+    agentPos: { x: number; y: number } | null,
+    mapBeliefs: MapBeliefs
+): ExploreDesire {
+    // If we don't know where we are, pick the first explore desire available
+    if (!agentPos) return explores[0];
+
+    // Score each candidate and pick the best one
+    const now = Date.now();
+    return explores.reduce((best, desire) =>
+        scoreExplore(desire, agentPos, mapBeliefs, now) > scoreExplore(best, agentPos, mapBeliefs, now) ? desire : best,
     );
-    const candidates = outOfRange.length > 0 ? outOfRange : explores;
-    // Select the nearest candidate
-    return candidates.reduce((nearest, d) =>
-        manhattanDistance(d.target, agentPos) < manhattanDistance(nearest.target, agentPos) ? d : nearest,
-    );
+}
+
+/**
+ * Score an ExploreDesire based on how long it's been since the target tile was last visited, 
+ * adjusted for distance: score = age / (distance + 1).
+ * Tiles that have never been visited score Infinity and will always be chosen over visited tiles.
+ * Among visited tiles, those that haven't been visited for a long time and are closer will score higher.
+ * @param desire The ExploreDesire to score, containing the target tile position.
+ * @param agentPos The current position of the agent, used to calculate distance. If null, the desire will score 0.
+ * @param mapBeliefs The agent's beliefs about the map, used to look up the last visit time for the target tile.
+ * @param now The current timestamp, used to calculate the age of the last visit.
+ * @returns A numeric score representing the desirability of exploring the target tile, where higher is better.
+ */
+function scoreExplore(
+    desire: ExploreDesire,
+    agentPos: { x: number; y: number },
+    mapBeliefs: MapBeliefs,
+    now: number
+): number {
+    // Get spawn tile distance and age since last visit
+    const distance = manhattanDistance(desire.target, agentPos);
+    const lastVisit = mapBeliefs.getSpawnTileVisitTime(desire.target);
+    const age = lastVisit !== undefined ? now - lastVisit : Infinity;
+
+    return age / (distance + 1);
 }
