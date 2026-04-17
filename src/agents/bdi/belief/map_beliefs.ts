@@ -13,8 +13,8 @@ export class MapBeliefs {
     private spawnTiles: Tile[] = [];                 // Precomputed on updateMap; map is static so this never changes
     private deliveryTiles: Tile[] = [];              // Precomputed on updateMap; map is static so this never changes
     
-    private crates = new Tracker<Crate>();                     // Latest-only store; eviction is handled by MapBeliefs.evict()
-    private spawnTilesVisitTimes = new Map<Position, number>();    // Keep track of when spawn tiles were last sensed, keyed as "x,y"
+    private crates = new Tracker<Crate>();                           // Latest-only store; eviction is handled by MapBeliefs.evict()
+    private spawnTilesSensingTimes = new Map<Position, number>();    // Keep track of when spawn tiles were last sensed, keyed as "x,y"
     
     /**
      * Initialize map beliefs from the given map info.
@@ -83,10 +83,9 @@ export class MapBeliefs {
         sensedPositions.forEach(position => {
             const tile = this.getTileAt(position);
             if (tile && tile.type === TILE_TYPE.SPAWN_POINT) {
-                this.spawnTilesVisitTimes.set(position, currentTime);
+                this.spawnTilesSensingTimes.set(position, currentTime);
             }
         });
-        console.log("[MAP BELIEFS] Updated spawn tile visit times:", this.spawnTilesVisitTimes);
     }
 
     /**
@@ -95,7 +94,7 @@ export class MapBeliefs {
      * @returns The timestamp of the last visit to the spawn tile, or undefined if never visited.
      */
     getSpawnTileVisitTime(position: Position): number | undefined {
-        return this.spawnTilesVisitTimes.get(position);
+        return this.spawnTilesSensingTimes.get(position);
     }
     /**
      * All parcel delivery tiles.
