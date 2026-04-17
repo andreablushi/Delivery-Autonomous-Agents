@@ -175,6 +175,10 @@ export class AgentBeliefs {
         return { direction: winner, confidence: maxVotes / totalValidPairs };
     }
 
+    getCarryCapacity(): number | null {
+        return this.playerSettings?.carry_capacity ?? null;
+    }
+
     /**
      * Evict stale beliefs that haven't been updated recently to prevent memory bloat.
      */
