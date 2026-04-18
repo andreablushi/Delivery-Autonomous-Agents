@@ -33,6 +33,10 @@ export class BDIAgent {
         // Set game configuration in beliefs once received
         this.socket.on('config', (config : IOConfig) => {
             this.beliefs.setSettings(config);
+
+            // If config change causes observation distance change, we need to recompute cluster weights for the map beliefs
+            const obsDist = this.beliefs.agents.getObservationDistance();                                                                                                                                                         
+            if (obsDist !== null) this.beliefs.map.computeClusterWeights(obsDist);                                                                                                                                                
         });
 
         // Running it makes it move every time it receives a sensing event, it works like a while loop
@@ -54,6 +58,11 @@ export class BDIAgent {
             //NOTE: currently the server for an NxM map sends width=N-1 and height=M-1, so we add 1 to both to get the correct dimensions.
             // This is a temporary workaround until the server is fixed to send the correct dimensions.
             this.beliefs.map.updateMap(width +1, height +1, tiles);
+
+            // Compute cluster weights for spawn tiles now that we have the map and observation distance (if already received in config)
+            const obsDist = this.beliefs.agents.getObservationDistance();
+            if (obsDist !== null) this.beliefs.map.computeClusterWeights(obsDist);
+            
             if (this.debug) console.log("[PERCEIVE] Map info received — width:", width, "| height:", height, "| tiles:", tiles.length);
         });
 

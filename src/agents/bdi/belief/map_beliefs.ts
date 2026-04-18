@@ -4,6 +4,7 @@ import type { Position } from "../../../models/position.js";
 import type { IOTile, IOCrate } from "../../../models/djs.js";
 import { TILE_TYPE, type TileType } from "../../../models/tile_type.js";
 import { Tracker } from "./utils/tracker.js";
+import { manhattanDistance } from "../../../utils/metrics.js";
 
 /**
  * Beliefs about the static map layout and dynamic crate positions.
@@ -15,7 +16,7 @@ export class MapBeliefs {
     
     private crates = new Tracker<Crate>();                           // Latest-only store; eviction is handled by MapBeliefs.evict()
     private spawnTilesSensingTimes = new Map<string, number>();      // Keep track of when spawn tiles were last sensed, keyed as "x,y"
-
+    private spawnTilesClusterWeights = new Map<string, number>();    // Keep track of how many spawn tiles are in the cluster of each spawn tile, keyed as "x,y"
     
     /**
      * Initialize map beliefs from the given map info.
@@ -25,20 +26,23 @@ export class MapBeliefs {
      * @returns void
      */
     updateMap(width: number, height: number, tiles: IOTile[]): void {
+        // Normalize tile types to strings — the server may send numeric values (e.g. 1) instead of strings ('1')
+        const normalizedTiles = tiles.map(t => ({ ...t, type: String(t.type) as TileType }));
+
         // Pre-fill with WALL so any tile absent from the server payload is treated as unwalkable
         const matrix = Array.from({ length: height }, () =>
             Array<TileType>(width).fill(TILE_TYPE.WALL)
         );
-        for (const t of tiles) {
+        for (const t of normalizedTiles) {
             matrix[t.y][t.x] = t.type;
         }
         this.map = { width, height, tiles: matrix };
 
         // Precompute static tile lists — map never changes after this point
-        this.spawnTiles = tiles
+        this.spawnTiles = normalizedTiles
             .filter(t => t.type === TILE_TYPE.SPAWN_POINT)
             .map(t => ({ x: t.x, y: t.y, type: t.type }));
-        this.deliveryTiles = tiles
+        this.deliveryTiles = normalizedTiles
             .filter(t => t.type === TILE_TYPE.DELIVERY_POINT)
             .map(t => ({ x: t.x, y: t.y, type: t.type }));
     }
@@ -94,9 +98,36 @@ export class MapBeliefs {
      * @param position The position of the spawn tile to query.
      * @returns The timestamp of the last sensing of the spawn tile, or undefined if never sensed.
      */
-    getSpawnTilesSensingTime(position: Position): number | undefined {
+    getSpawnTileSensingTime(position: Position): number | undefined {
         return this.spawnTilesSensingTimes.get(`${position.x},${position.y}`);
     }
+
+    /**
+     * Compute and cache a distance-weighted cluster weight for every spawn tile.
+     * Weight = Σ (observationDistance - dist(tile, neighbor) + 1) for each neighbor within range.
+     * Must be called once after observationDistance is known from the config event.
+     */
+    computeClusterWeights(observationDistance: number): void {
+        for (const tile of this.spawnTiles) {
+            const weight = this.spawnTiles.reduce((sum, neighbor) => {
+                const distance = manhattanDistance(tile, neighbor);
+                return distance <= observationDistance ? sum + (observationDistance - distance + 1) : sum;
+            }, 0);
+            this.spawnTilesClusterWeights.set(`${tile.x},${tile.y}`, weight);
+        }
+    }
+
+    /**
+     * Get the cluster weight for a given spawn tile position,
+     * which represents how many spawn tiles are sensed by standing on that tile.
+     * @param position The position of the spawn tile to query.
+     * @returns The cluster weight of the spawn tile, or 0 if not yet computed.
+     * Higher weights indicate tiles that can sense more spawn tiles when stood upon.
+     */
+    getSpawnTileClusterWeight(position: Position): number {
+        return this.spawnTilesClusterWeights.get(`${position.x},${position.y}`) ?? 0;
+    }
+
     /**
      * All parcel delivery tiles.
      * @return An array of delivery tiles
