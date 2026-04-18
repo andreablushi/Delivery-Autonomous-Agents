@@ -99,7 +99,9 @@ export class Intentions {
      */
     private validatePath(beliefs: Beliefs): boolean {
         if (!this.currentIntention || this.currentIntention.path.length === 0) return false;
-        return beliefs.map.isWalkable(this.currentIntention.path[0]);
+        const me = beliefs.agents.getCurrentMe();
+        if (!me?.lastPosition) return false;
+        return beliefs.map.isWalkable(me.lastPosition, this.currentIntention.path[0]);
     }
 
     /**
@@ -119,7 +121,7 @@ export class Intentions {
         if (!('target' in this.currentIntention.desire)) return;                                                                                                                           
 
         // Compute path using A* algorithm
-        const path = aStar(me.lastPosition, this.currentIntention.desire.target, (pos) => beliefs.map.isWalkable(pos));
+        const path = aStar(me.lastPosition, this.currentIntention.desire.target, (from, to) => beliefs.map.isWalkable(from, to));
         
         // If no path found, drop the intention
         if (!path || path.length === 0) {
