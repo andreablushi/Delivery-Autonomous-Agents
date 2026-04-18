@@ -21,7 +21,6 @@ const NEIGHBOURS: Position[] = [
 
 /**
  * Find the shortest path from `start` to `goal` using A*.
- *
  * @param start      Starting position (not included in the returned path).
  * @param goal       Target position (included in the returned path).
  * @param isWalkable Predicate that returns true for passable tiles.
@@ -31,7 +30,7 @@ const NEIGHBOURS: Position[] = [
 export function aStar(
     start: Position,
     goal: Position,
-    isWalkable: (pos: Position) => boolean,
+    isWalkable: (from: Position, to: Position) => boolean,
 ): Position[] | null {
     const open = new Map<string, Node>();
     const closed = new Set<string>();
@@ -67,7 +66,7 @@ export function aStar(
             const nKey = posKey(neighbour);
 
             if (closed.has(nKey)) continue;
-            if (!isWalkable(neighbour)) continue;
+            if (!isWalkable(current.pos, neighbour)) continue;
 
             const g = current.g + 1;
             const existing = open.get(nKey);

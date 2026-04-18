@@ -61,13 +61,28 @@ export class MapBeliefs {
     }
 
     /**
-     * Check if a given position is walkable (not a wall nor crate).
-     * @param position The position to check for walkability.
+     * Check if a given position is walkable.
+     * @param from The position from which the agent is trying to move
+     * @param to The position the agent is trying to move to
      * @returns True if the position is walkable, false otherwise.
      */
-    isWalkable(position: Position): boolean {
-        const tile = this.getTileAt(position);
-        return tile !== null && tile.type !== TILE_TYPE.WALL;
+    isWalkable(from: Position, to: Position): boolean {
+        const tile = this.getTileAt(to);
+
+        // If there's no tile (out of bounds) or it's a wall, it's not walkable
+        if (tile === null || tile.type === TILE_TYPE.WALL) return false;
+
+        // Conveyors block entry only from the direction that opposes their push.
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        switch (tile.type) {
+            case TILE_TYPE.CONVEYOR_LEFT:  return dx !== 1;   // blocked if moving right (dx+1 against left)
+            case TILE_TYPE.CONVEYOR_RIGHT: return dx !== -1;  // blocked if moving left  (dx-1 against right)
+            case TILE_TYPE.CONVEYOR_UP:    return dy !== -1;  // blocked if moving down  (dy-1 against up)
+            case TILE_TYPE.CONVEYOR_DOWN:  return dy !== 1;   // blocked if moving up    (dy+1 against down)
+        }
+
+        return true;
     }
     
     /**
