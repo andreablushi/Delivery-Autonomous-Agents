@@ -47,6 +47,7 @@ export function getBestDesire(desires: GeneratedDesires, beliefs: Beliefs): Desi
     return filterExplore(
         explores,
         beliefs.agents.getCurrentMe()?.lastPosition ?? null,
+        beliefs.agents.getObservationDistance(),
         beliefs.map
     );
 }
@@ -138,19 +139,20 @@ function scoreDeliverDesire(
 }
 
 /**
- * Select the best ExploreDesire using sensing-time scoring: score = age / (distance + 1).
- * Never-sensed tiles score Infinity and always win. Among sensed tiles, older and closer tiles score higher.
- * Candidates are pre-filtered to those outside the agent's observation range; falls back to all tiles if none qualify.
+ * Select the best ExploreDesire using cluster-weighted sensing-age scoring:
+ *   score = clusterWeight * age / (distance + 1)
+ * Candidates are pre-filtered to those outside observation range; falls back to all tiles if none qualify.
  */
 export function filterExplore(
     explores: ExploreDesire[],
     agentPos: { x: number; y: number } | null,
+    observationDistance: number | null,
     mapBeliefs: MapBeliefs
 ): ExploreDesire {
-    // If we don't know where we are, pick the first explore desire available
+    // If we don't know our position, return the first explore desire
     if (!agentPos) return explores[0];
-
-    // Score each candidate and pick the best one
+    
+    // Weight each explore desire and pick the one with the highest score
     const now = Date.now();
     return explores.reduce((best, desire) =>
         scoreExplore(desire, agentPos, mapBeliefs, now) > scoreExplore(best, agentPos, mapBeliefs, now) ? desire : best,
@@ -176,10 +178,14 @@ function scoreExplore(
 ): number {
     // Get spawn tile distance and age since last sensing
     const distance = manhattanDistance(desire.target, agentPos);
-    const lastSensing = mapBeliefs.getSpawnTilesSensingTime(desire.target);
+    const lastSensing = mapBeliefs.getSpawnTileSensingTime(desire.target);
+    
     // If the tile has never been sensed, assign it an infinite score to prioritize it above all else. 
     // Otherwise, calculate the score based on age and distance.
     const age = lastSensing !== undefined ? now - lastSensing : Infinity;
 
-    return age / (distance + 1);
+    // Get the cluster weight for the target tile
+    const clusterWeight = mapBeliefs.getSpawnTileClusterWeight(desire.target);
+    const weight = clusterWeight > 0 ? clusterWeight : 1;
+    return weight * age / (distance + 1);
 }

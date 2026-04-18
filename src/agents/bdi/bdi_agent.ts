@@ -33,6 +33,8 @@ export class BDIAgent {
         // Set game configuration in beliefs once received
         this.socket.on('config', (config : IOConfig) => {
             this.beliefs.setSettings(config);
+            const obsDist = this.beliefs.agents.getObservationDistance();
+            if (obsDist !== null) this.beliefs.map.computeClusterWeights(obsDist);
         });
 
         // Running it makes it move every time it receives a sensing event, it works like a while loop
