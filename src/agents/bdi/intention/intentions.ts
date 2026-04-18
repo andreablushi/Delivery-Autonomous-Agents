@@ -48,10 +48,9 @@ export class Intentions {
 
         // Validate current intention
         if (!this.validateCurrentIntention(beliefs)) {
-            // If the current intention is no longer valid, we need to select a new desire and replan from scratch
-            this.currentIntention = { desire: getBestDesire(this.desires, beliefs), path: [] };
-            // If the current intention is no longer valid, we need to replan from scratch
-            this.plan(beliefs, null);
+            // Pick the best desire that has a reachable path; skip unreachable ones
+            this.selectIntention(beliefs);
+            return;
         }
 
         // Validate current path
@@ -59,9 +58,9 @@ export class Intentions {
             let agentBlocked: Position | null = null;
             // If the current path is no longer valid, we can try to replan by setting the temporary blocks
             if(this.isNextStepBlockedByAgent(beliefs)){
-                // If the path is blocked by an agent, we can try to replan by treating the next step as temporarily blocked
                 agentBlocked = this.currentIntention?.path[0] || null;
             }
+            // Replan the path
             this.plan(beliefs, agentBlocked);
         }
     }
@@ -157,34 +156,73 @@ export class Intentions {
     }
 
     /**
-     * Computes a path for the current intention using A* algorithm based on the current beliefs.
-     * @param beliefs - The current beliefs of the agent
-     * @returns 
+     * Selects the first desire (in priority order) that has a reachable path.
+     * @param beliefs - The current beliefs of the agent, used to validate paths.
+     * @returns void, but updates the current intention to the selected desire and its path, or null if no valid intention is found.
+     */
+    private selectIntention(beliefs: Beliefs): void {
+        // Helper function to check if there are any desires left to consider
+        const hasCandidates = () => [...this.desires.values()].some(arr => arr.length > 0);
+
+        // Loop through desires in priority order until we find one with a valid path
+        while (hasCandidates()) {
+            // Get the best desire based on the current beliefs
+            const desire = getBestDesire(this.desires, beliefs);
+
+            // Immediate desires don't need pathfinding
+            if (desire.type === 'PICKUP_PARCEL' || desire.type === 'PUTDOWN_PARCEL') {
+                this.currentIntention = { desire, path: [] };
+                return;
+            }
+
+            // For navigation desires, set the intention and try to plan a path
+            this.currentIntention = { desire, path: [] };
+            this.plan(beliefs, null);
+
+            // If a valid path is found, we can keep this intention
+            if (this.currentIntention !== null) return; 
+
+            // Remove the unreachable desire from current desires
+            const desireTypeArray = this.desires.get(desire.type);
+            if (!desireTypeArray) continue;
+            desireTypeArray.splice(desireTypeArray.indexOf(desire), 1);
+            if (desireTypeArray.length === 0) this.desires.delete(desire.type);
+
+        }
+
+        // If we exhaust all desires without finding a valid path, drop the intention
+        this.currentIntention = null;
+    }
+
+    /**
+     * Computes a path for the current intention via A*, treating an optional position as temporarily blocked.
+     * Drops the intention if no path is found.
+     * @param beliefs - The current beliefs of the agent, used to compute the path.
+     * @param temporaryBlocked - An optional position to treat as temporarily blocked during pathfinding.
+     * @returns void, but updates the current intention's path if a valid path is found, or drops the intention if no path is found.
      */
     private plan(beliefs: Beliefs, temporaryBlocked: Position | null): void {
-        // If there is no current intention, we cannot plan
+        // If there is no current intention or the desire doesn't have a target, we cannot plan a path
         if (!this.currentIntention) return;
+        if (!('target' in this.currentIntention.desire)) return;
 
         // Get current position from beliefs
         const me = beliefs.agents.getCurrentMe();
         if (!me?.lastPosition) return;
 
-        // Type guard to ensure the desire has a target (i.e. it's a navigation desire)
-        if (!('target' in this.currentIntention.desire)) return;                                                                                                                           
-
-        // Compute path using A* algorithm, treating blockedByAgentAt as temporarily unwalkable
+        // Compute a path from the current position
         const path = aStar(me.lastPosition, this.currentIntention.desire.target, (from, to) => {
             if (temporaryBlocked && to.x === temporaryBlocked.x && to.y === temporaryBlocked.y) return false;
             return beliefs.map.isWalkable(from, to);
         });
-        
-        // If no path found, drop the intention
+
+        // If no path is found, drop the current intention
         if (!path || path.length === 0) {
             this.currentIntention = null;
             return;
         }
-        
-        // Update the current intention with the new path
+
+        // Update the current intention's path
         this.currentIntention.path = path;
     }
 
