@@ -55,23 +55,31 @@ npm install
 
 ## Running the Agent
 
-To run the agent, use the following command in your terminal:
+| Command | Description |
+|---|---|
+| `npm build` | Compile TypeScript to JavaScript (output in `dist/`). |
+| `npm start` | Single agent, production mode. |
+| `npm run dev` | Single agent, debug logging enabled. |
+| `npm run dev:competitive` | Multiple single agents, in order to debug competitive behavior. In order to run multiple agents, set `TOKEN_1`, `TOKEN_2`, … in your `.env` (one per agent) |
 
-```bash
-npm start
-```
 
 ## Repository Structure
 
 ```
 autonomous-software-agents/
-├── README.md                         # Project overview (this file)
-├── src/
-│   └── index.js                      # Main JavaScript file for the project
-├── docs/
-│   ├── media/                        # Images, logos, and media assets
-│   └── report/                       # Report-specific LaTeX files
-│       ├── main.tex
-│       ├── sections/
-├── report.pdf  
+├── src/                        # Source code of the project
+│   ├── index.ts                # Entry point of the application
+│   ├── agents/                 # Directory for different agent implementations
+│   │   ├── bdi/                # BDI agent implementation
+│   │   │   ├── bdi_agent.ts    # Main BDI agent class
+│   │   │   ├── belief/         # Belief management module
+│   │   │   ├── desire/         # Desire generation and filter module
+│   │   │   ├── intention/      # Intention selection and execution module
+│   │   │   └── navigation/     # Plan library and navigation module
+│   │   └── llm/                # LLM-based agent implementation
+│   │       ├── llm_agent.js    # Main LLM agent class
+│   │       └── prompts/        # Directory for prompt templates and management
+│   ├── models/                 # Data types definitions and interfaces
+│   └── utils/                  # Utility functions and modules
+├── docs/                       # Documentation and related materials
 ```
