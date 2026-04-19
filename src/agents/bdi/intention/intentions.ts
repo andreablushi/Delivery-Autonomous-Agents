@@ -127,19 +127,12 @@ export class Intentions {
 
         // Check if the next step is blocked by a known agent
         if (this.isNextStepBlockedByAgent(beliefs)) {
+            beliefs.map.markBlocked(this.currentIntention.path[0]);
             return false;
         }
 
-        // Check if every step within the observation range is still walkable
-        const obsDistance = beliefs.agents.getObservationDistance();
-        const steps = [me.lastPosition, ...this.currentIntention.path];
-        for (let i = 0; i < steps.length - 1; i++) {
-            // If the step is beyond the observation distance, we cannot validate it
-            const manhattanDist = Math.abs(steps[i].x - me.lastPosition.x) + Math.abs(steps[i].y - me.lastPosition.y);
-            if (obsDistance !== null && manhattanDist > obsDistance) break;
-            // If any step in the path is not walkable, the path is no longer valid
-            if (!beliefs.map.isWalkable(steps[i], steps[i + 1])) return false;
-        }
+        // If after replanning the path is empty, it's not valid
+        if (this.currentIntention.path.length === 0) return false;
 
         // The current path is still valid
         return true;
@@ -235,20 +228,8 @@ export class Intentions {
         const me = beliefs.agents.getCurrentMe();
         if (!me?.lastPosition) return;
 
-        const temporaryBlocked : Position[] = [];
-        // If the next step is blocked by an agent, 
-        // we can try to replan by considering path without enemies with confidence above 0.9
-        const enemies = beliefs.agents.getCurrentEnemies();
-        for (const enemy of enemies) {
-            const confidence = beliefs.agents.getEnemyConfidence(enemy.id);
-            if (confidence && confidence > 0.7 && enemy.lastPosition) {
-                temporaryBlocked.push(enemy.lastPosition);
-            }
-        }
-
         // Compute a path from the current position
         const path = aStar(me.lastPosition, this.currentIntention.desire.target, (from, to) => {
-            if (temporaryBlocked.some(b => b.x === to.x && b.y === to.y)) return false;
             return beliefs.map.isWalkable(from, to);
         });
 
@@ -277,16 +258,39 @@ export class Intentions {
 
         // If it's a navigation desire, check there is a path
         if (this.currentIntention.path.length === 0) return null;
+        // Get the next step in the path
+        const nextStep = this.currentIntention.path[0];    
+        // Compute the direction to the next step
+        const direction = posToDirection(from, nextStep);
 
-        // If the desire is a navigation desire, compute the direction to the next step
-        const next = this.currentIntention.path.shift()!;
-        const direction = posToDirection(from, next);
+        return direction;
+    }
 
-        // If the path is now empty, we have reached the target and can drop the intention
-        if (this.currentIntention.path.length === 0) {
+    /**
+     * Advances the path by one step, effectively marking the next step as completed.
+     * @returns void, but updates the current intention's path by removing the first step. If the path becomes empty, drops the current intention.
+     */
+    shiftPath(): void {
+        if (this.currentIntention && this.currentIntention.path.length > 0) {
+            this.currentIntention.path.shift();
+        }
+        else {
             this.currentIntention = null;
         }
-        
-        return direction;
+    }
+
+    /**
+     * Invalidates the current path by marking the next step as temporarily blocked in beliefs and dropping the current intention.
+      * This is called when the agent attempts to move but finds the path is blocked, so we want to avoid replanning the same path immediately and instead mark it as blocked for a short time.
+      * @param beliefs The current beliefs of the agent, used to mark the next step as temporarily blocked.
+      * @returns void, but updates beliefs to mark the next step as blocked and drops the current intention.
+     */
+    invalidatePath(beliefs: Beliefs): void {
+        // Mark the next step as temporarily blocked to avoid repeated failed attempts
+        if (this.currentIntention && this.currentIntention.path.length > 0) {
+            beliefs.map.markBlocked(this.currentIntention.path[0]);
+        }
+        // Drop the current intention so that it will be reconsidered in the next deliberation cycle
+        this.currentIntention = null;
     }
 }

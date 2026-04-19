@@ -17,7 +17,8 @@ export class MapBeliefs {
     private crates = new Tracker<Crate>();                           // Latest-only store; eviction is handled by MapBeliefs.evict()
     private spawnTilesSensingTimes = new Map<string, number>();      // Keep track of when spawn tiles were last sensed, keyed as "x,y"
     private spawnTilesClusterWeights = new Map<string, number>();    // Keep track of how many spawn tiles are in the cluster of each spawn tile, keyed as "x,y"
-    
+    private temporaryBlocked = new Map<string, number>();             // Temporary blockers for pathfinding, e.g. tiles that are currently occupied by other agents or crates but may become free soon
+  
     /**
      * Initialize map beliefs from the given map info.
      * @param width Width of the map in tiles.
@@ -82,6 +83,10 @@ export class MapBeliefs {
             case TILE_TYPE.CONVEYOR_DOWN:  return dy !== 1;   // blocked if moving up    (dy+1 against down)
         }
 
+        // If it's temporary blocked (e.g. occupied by another agent or crate), it's not walkable
+        if (this.isBlocked(to)) return false;
+
+        // Otherwise, it's walkable
         return true;
     }
     
@@ -172,6 +177,28 @@ export class MapBeliefs {
      */
     getCurrentCrates(): Crate[] {
         return this.crates.getCurrentAll();
+    }
+
+    /**
+     * Mark a tile as temporarily blocked for pathfinding purposes
+     * @param pos The position to mark as blocked
+     * @param ttl How long to keep the tile blocked in milliseconds (default 1000ms)
+     */
+    markBlocked(pos: Position, ttl = 1_000): void {
+        this.temporaryBlocked.set(`${pos.x},${pos.y}`, Date.now() + ttl);
+    }
+
+    /**
+     * Check if a tile is currently marked as temporarily blocked     
+     * @param pos The position to check
+     * @returns True if the tile is currently blocked, false otherwise
+     */
+    isBlocked(pos: Position): boolean {
+        const key = `${pos.x},${pos.y}`;
+        const exp = this.temporaryBlocked.get(key);
+        if (exp === undefined) return false;
+        if (Date.now() >= exp) { this.temporaryBlocked.delete(key); return false; }
+        return true;
     }
 
     /**

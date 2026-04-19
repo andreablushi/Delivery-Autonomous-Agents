@@ -124,32 +124,44 @@ export class BDIAgent {
 
         // Get the next step from the intentions manager
         const move = this.intentions.getNextAction(me.lastPosition);
-
+        let result;
         // Handle action desires (pickup/putdown) immediately without pathfinding
         if (move === 'pickup') {
             this.moving = true;
-            await this.socket.emitPickup();
+            result =await this.socket.emitPickup();
             this.moving = false;
             if (this.debug) console.log("[EXECUTE] Picking up parcel.");
             return;
         }
         else if(move === 'putdown') {
             this.moving = true;
-            await this.socket.emitPutdown();
+            result = await this.socket.emitPutdown();
             this.moving = false;
             this.beliefs.parcels.cleanDeliveredParcels(this.beliefs.parcels.getCarriedByAgent(me.id));
             if (this.debug) console.log("[EXECUTE] Delivering parcel.");
             return;
         }
         else if (move === null) {
+            result = null;
             if (this.debug) console.log("[EXECUTE] No move to execute.");
             return;
         }
         else{
             this.moving = true;
-            await this.socket.emitMove(move);
+            try {
+                result = await this.socket.emitMove(move);
+            } catch {
+                result = false;
+            }
             this.moving = false;
             if (this.debug) console.log("[EXECUTE] Moving to next step:", move);
+        }
+
+        // If the move was successful, update beliefs about the agent's position immediately to reflect the new location (optimistic update)
+        if (result !== false) {
+            this.intentions.shiftPath(); // Remove the step we just took from the intention's path
+        } else {
+            this.intentions.invalidatePath(this.beliefs); // If the move failed, invalidate the current path to trigger replanning in the next cycle
         }
     }
 }
