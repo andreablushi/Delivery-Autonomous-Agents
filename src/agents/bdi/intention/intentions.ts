@@ -248,7 +248,8 @@ export class Intentions {
      * @param from - The current position of the agent, used to compute the direction to the next step.
       * @returns The next direction to move ('up', 'down', 'left', 'right') or null if no intention or path is available.
      */
-    getNextAction(from: { x: number; y: number }): string | null {
+    getNextAction(from: { x: number; y: number }, beliefs: Beliefs): string | null {
+
         // If there is no current intention, we cannot return a next action
         if (!this.currentIntention) return null;
 
@@ -258,6 +259,10 @@ export class Intentions {
 
         // If it's a navigation desire, check there is a path
         if (this.currentIntention.path.length === 0) return null;
+        // Ensure the path is still valid before trying to get the next action
+        if(this.isNextStepBlockedByAgent(beliefs)) {
+            return null;
+        }
         // Get the next step in the path
         const nextStep = this.currentIntention.path[0];    
         // Compute the direction to the next step

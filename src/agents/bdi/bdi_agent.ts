@@ -123,7 +123,7 @@ export class BDIAgent {
         if (!me?.lastPosition) return;
 
         // Get the next step from the intentions manager
-        const move = this.intentions.getNextAction(me.lastPosition);
+        const move = this.intentions.getNextAction(me.lastPosition, this.beliefs);
         let result;
         // Handle action desires (pickup/putdown) immediately without pathfinding
         if (move === 'pickup') {
