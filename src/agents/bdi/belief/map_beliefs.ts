@@ -73,6 +73,9 @@ export class MapBeliefs {
         // If there's no tile (out of bounds) or it's a wall, it's not walkable
         if (tile === null || tile.type === TILE_TYPE.WALL) return false;
 
+        // If it's temporary blocked (e.g. occupied by another agent or crate), it's not walkable
+        if (this.isBlocked(to)) return false;
+
         // Conveyors block entry only from the direction that opposes their push.
         const dx = to.x - from.x;
         const dy = to.y - from.y;
@@ -83,8 +86,7 @@ export class MapBeliefs {
             case TILE_TYPE.CONVEYOR_DOWN:  return dy !== 1;   // blocked if moving up    (dy+1 against down)
         }
 
-        // If it's temporary blocked (e.g. occupied by another agent or crate), it's not walkable
-        if (this.isBlocked(to)) return false;
+
 
         // Otherwise, it's walkable
         return true;
@@ -126,6 +128,8 @@ export class MapBeliefs {
      * Compute and cache a distance-weighted cluster weight for every spawn tile.
      * Weight = Σ (observationDistance - dist(tile, neighbor) + 1) for each neighbor within range.
      * Must be called once after observationDistance is known from the config event.
+     * @param observationDistance The maximum distance at which the agent can sense tiles, used to determine which spawn tiles are in the same cluster.
+     * @returns void
      */
     computeClusterWeights(observationDistance: number): void {
         for (const tile of this.spawnTiles) {
@@ -182,9 +186,9 @@ export class MapBeliefs {
     /**
      * Mark a tile as temporarily blocked for pathfinding purposes
      * @param pos The position to mark as blocked
-     * @param ttl How long to keep the tile blocked in milliseconds (default 1000ms)
+     * @param ttl How long to keep the tile blocked in milliseconds (default 1500ms)
      */
-    markBlocked(pos: Position, ttl = 1_000): void {
+    markBlocked(pos: Position, ttl = 1_500): void {
         this.temporaryBlocked.set(`${pos.x},${pos.y}`, Date.now() + ttl);
     }
 

@@ -140,25 +140,44 @@ export class Intentions {
         const next = this.currentIntention.path[0];
         // Get the list of currently believed enemy agents from beliefs
         const enemies = beliefs.agents.getCurrentEnemies();
+        // Define a helper function to check if a position is walkable according to beliefs, used for filtering predictions
+        const walkable = (from: Position, to: Position) => beliefs.map.isWalkable(from, to);
 
         for (const enemy of enemies) {
             const pos = enemy.lastPosition;
             if (!pos) continue;
 
-            // Enemy already on the next step
-            if (pos.x === next.x && pos.y === next.y) return true;
+            // If the enemy's last known position is not an integer coordinate, it means we observed it in a half-tile position (e.g., moving between two tiles).
+            // In this case, we should consider both adjacent tiles as potential current positions for the enemy, since we don't know which tile it will end up in.
+            const xs = Number.isInteger(pos.x) ? [pos.x] : [Math.floor(pos.x), Math.ceil(pos.x)];
+            const ys = Number.isInteger(pos.y) ? [pos.y] : [Math.floor(pos.y), Math.ceil(pos.y)];
 
-            // Enemy adjacent to the next step that is going to move onto it in the next turn with high confidence
-            if ((Math.abs(pos.x - next.x) + Math.abs(pos.y - next.y)) <= 1) {
-                const predictedPosition = beliefs.agents.predictEnemyNextPosition(enemy.id);
-                if (predictedPosition && predictedPosition.confidence >= 0.5) {
-                    if (predictedPosition.position.x === next.x && predictedPosition.position.y === next.y) {
-                        return true;
+            // Enemy is currently observed on the next tile
+            if (xs.includes(next.x) && ys.includes(next.y)) {
+                return true;
+            }
+
+            // Confident prediction that is about to move onto the next tile
+            const predicted = beliefs.agents.predictEnemyNextPosition(enemy.id, walkable);
+            if (predicted && predicted.confidence >= 0.5 &&
+                predicted.position.x === next.x && predicted.position.y === next.y) {
+                return true;
+            }
+
+            // No confident prediction, but enemy is adjacent to the next tile and currently in a half position, so it might be moving onto the next tile
+            if (!predicted || predicted.confidence < 0.5) {
+                // For each possible current position of the enemy
+                for (const ex of xs) {
+                    for (const ey of ys) {
+                        // Check if the enemy is adjacent to the next tile (Manhattan distance of 1) and could potentially move onto it in the next step
+                        if (Math.abs(ex - next.x) + Math.abs(ey - next.y) === 1) {
+                            return true;
+                        }
                     }
                 }
             }
         }
-
+        // No known agents are currently blocking the next step
         return false;
     }
 
@@ -238,7 +257,6 @@ export class Intentions {
       * @returns The next direction to move ('up', 'down', 'left', 'right') or null if no intention or path is available.
      */
     getNextAction(from: { x: number; y: number }, beliefs: Beliefs): string | null {
-
         // If there is no current intention, we cannot return a next action
         if (!this.currentIntention) return null;
 
