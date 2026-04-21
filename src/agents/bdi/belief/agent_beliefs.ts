@@ -16,6 +16,9 @@ export class AgentBeliefs {
     private enemiesMemory = new Memory<Agent>(1_000, 20);   // Memory of enemy agents, keyed by ID, with TTL-based eviction
     private playerSettings: PlayerSettings | null = null;   // Player settings from config
 
+    private readonly FRACTION_CEIL_THRESHOLD = 0.6;
+    private readonly FRACTION_FLOOR_THRESHOLD = 0.4;
+
     // Memory management - EvictInterval prevents the agent from evicting stale beliefs too frequently,
     private lastEvict = 0;                          // Timestamp of the last eviction of stale beliefs
     private readonly EVICT_INTERVAL = 1_000;        // Number of milliseconds between evictions of stale beliefs
@@ -123,19 +126,33 @@ export class AgentBeliefs {
      * @returns Direction prediction with confidence score, or null if insufficient history
      */
     //#TODO Majority vote and not timestamp aware
-    predictEnemyNextPosition(id: string): PositionPrediction | null {
+    predictEnemyNextPosition(id: string, isWalkable?: (from: Position, to: Position) => boolean): PositionPrediction | null {
         // If I have a tracking for this enemy, use its history to predict
         if(!this.enemies.getCurrent(id)?.lastPosition) return null;
 
         // If the enemy is in an half position (not fully in a tile), we can predict that it's moving in the direction of the half position
         const lastPos = this.enemies.getCurrent(id)!.lastPosition!;
         if (!Number.isInteger(lastPos.x) || !Number.isInteger(lastPos.y)) {
-            let nextPos: PositionPrediction;
-            // Round the half position to the nearest tile in the direction of movement
-            if (!Number.isInteger(lastPos.x)) nextPos = { position: { x: Math.round(lastPos.x), y: lastPos.y }, confidence: 1.0 };
-            else nextPos = { position: { x: lastPos.x, y: Math.round(lastPos.y) }, confidence: 1.0 };
-            // Return with max confidence
-            return nextPos;
+            const xIsFractional = !Number.isInteger(lastPos.x);
+            const yIsFractional = !Number.isInteger(lastPos.y);
+
+            // If both are fractional, it's ambiguous and incosistent
+            if (xIsFractional && yIsFractional) return null;
+
+            // Enemy is currently in a half position between two horizontal tiles
+            if (xIsFractional) {
+                // Enemy is currently in a half position between two tiles horizontally, so we predict it's moving in the x direction towards the tile corresponding to the half position
+                const xMove = this.getFractionalMove(lastPos.x);
+                if (!xMove) return null;
+                const to = { x: xMove, y: lastPos.y };
+                return { position: to, confidence: 1.0 };
+            }
+
+            // Enemy is currently in a half position between two tiles vertically
+            const yMove = this.getFractionalMove(lastPos.y);
+            if (!yMove || !Number.isInteger(lastPos.x)) return null;
+            const to = { x: lastPos.x, y: yMove };
+            return { position: to, confidence: 1.0 };
         }
 
         // Get the history of observed positions for the specified enemy agent
@@ -164,7 +181,11 @@ export class AgentBeliefs {
             // Only consider valid movements in cardinal directions or stationary, and ignore any pairs that suggest diagonal movement which cannot be clearly categorized
             totalValidPairs++;
 
-            // The next position is determined by applying the movement direction (dx, dy) 
+            // Filter out directions blocked by walls from the enemy's current position
+            const dirCandidate: Position = { x: lastPos.x + dx, y: lastPos.y + dy };
+            if (isWalkable && !isWalkable(lastPos, dirCandidate)) continue;
+
+            // The next position is determined by applying the movement direction (dx, dy)
             const nextPosition: Position = { x: b.x + dx, y: b.y + dy };
 
             // Vote for the determined direction based on this position pair
@@ -191,6 +212,23 @@ export class AgentBeliefs {
 
         // Return the predicted direction along with a confidence score, which is the ratio of votes for the winning direction to the total number of valid position pairs analyzed
         return { position: winner, confidence: maxVotes / totalValidPairs };
+    }
+
+    /**
+     * Infers movement intent for a fractional coordinate using threshold bands.
+     * Returns null when the value is inside the uncertainty band.
+     * @param value The fractional coordinate value to analyze
+     * @returns The inferred integer coordinate if confidently towards one tile, or null if within the uncertainty band
+     */
+    private getFractionalMove(value: number): number | null {
+        // If the value is close enough to the upper integer, we infer movement towards the upper tile
+        const lower = Math.floor(value);
+        const upper = Math.ceil(value);
+        const fraction = value - lower;
+        // If the fractional part is above the upper threshold
+        if (fraction >= this.FRACTION_CEIL_THRESHOLD) return upper;
+        if (fraction <= this.FRACTION_FLOOR_THRESHOLD) return lower;
+        return null;
     }
 
     /**

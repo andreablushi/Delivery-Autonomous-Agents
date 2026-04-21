@@ -126,6 +126,8 @@ export class MapBeliefs {
      * Compute and cache a distance-weighted cluster weight for every spawn tile.
      * Weight = Σ (observationDistance - dist(tile, neighbor) + 1) for each neighbor within range.
      * Must be called once after observationDistance is known from the config event.
+     * @param observationDistance The maximum distance at which the agent can sense tiles, used to determine which spawn tiles are in the same cluster.
+     * @returns void
      */
     computeClusterWeights(observationDistance: number): void {
         for (const tile of this.spawnTiles) {
@@ -182,9 +184,9 @@ export class MapBeliefs {
     /**
      * Mark a tile as temporarily blocked for pathfinding purposes
      * @param pos The position to mark as blocked
-     * @param ttl How long to keep the tile blocked in milliseconds (default 1000ms)
+     * @param ttl How long to keep the tile blocked in milliseconds (default 1500ms)
      */
-    markBlocked(pos: Position, ttl = 1_000): void {
+    markBlocked(pos: Position, ttl = 1_500): void {
         this.temporaryBlocked.set(`${pos.x},${pos.y}`, Date.now() + ttl);
     }
 
