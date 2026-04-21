@@ -1,7 +1,6 @@
 import type { Beliefs } from "../belief/beliefs.js";
 import type {
     DesireType,
-    NavigationDesire,
     ExploreDesire,
     ReachParcelDesire,
     DeliverParcelDesire,
@@ -9,9 +8,24 @@ import type {
 } from "../../../models/desires.js";
 import { manhattanDistance } from "../../../utils/metrics.js";
 import { MapBeliefs } from "../belief/map_beliefs.js";
+import { IntentionQueue } from "../../../models/intentions.js";
+
 
 /**
- * Select the top desire out of all candidates generated this cycle.
+ * Determines the priority tier of a desire type.
+ * Priority tiers: PICKUP_PARCEL=3, PUTDOWN_PARCEL=2, REACH_PARCEL|DELIVER_PARCEL=1, EXPLORE=0
+ */
+export function getPriorityForDesire(desire: DesireType): number {
+    if (desire.type === 'PICKUP_PARCEL') return 3;
+    if (desire.type === 'PUTDOWN_PARCEL') return 2;
+    if (desire.type === 'REACH_PARCEL' || desire.type === 'DELIVER_PARCEL') return 1;
+    if (desire.type === 'EXPLORE') return 0;
+    return 0;
+}
+
+
+/**
+ * Build the ordered desire queue for all candidates generated this cycle.
  * Called by bdi_agent, handles the full priority ladder including action-tier desires.
  *
  * Priority tiers:
@@ -21,82 +35,48 @@ import { MapBeliefs } from "../belief/map_beliefs.js";
  *
  * @param desires Grouped desires from the generator.
  * @param beliefs Current beliefs of the agent.
- * @returns The chosen desire, or null if no candidates are available.
+ * @returns The ordered desire queue, or an empty array if no candidates are available.
  */
-export function getBestDesire(desires: GeneratedDesires, beliefs: Beliefs): DesireType {
+export function getIntentionQueue(desires: GeneratedDesires, beliefs: Beliefs): IntentionQueue {
+    const queue: IntentionQueue = [];
+
     // Immediate action desires have top priority
     const pickup = desires.get("PICKUP_PARCEL") ?? [];
-    if (pickup.length > 0) return pickup[0];
+    for (const desire of pickup) {
+        queue.push({ desire, score: Number.POSITIVE_INFINITY });
+    }
+
     const putdown = desires.get("PUTDOWN_PARCEL") ?? [];
-    if (putdown.length > 0) return putdown[0];
+    for (const desire of putdown) {
+        queue.push({ desire, score: Number.POSITIVE_INFINITY });
+    }
 
     // Goal desires require scoring and comparison
     const reaches = (desires.get("REACH_PARCEL") ?? []) as ReachParcelDesire[];
     const delivers = (desires.get("DELIVER_PARCEL") ?? []) as DeliverParcelDesire[];
 
-    // Get the best candidate from each goal category, then compare
-    const bestReach = filterReachParcel(reaches, beliefs);
-    const bestDeliver = filterDeliverParcel(delivers, beliefs);
-
-    // Choose the best between REACH_PARCEL and DELIVER_PARCEL
-    const chosen = chooseReachOrDeliver(bestReach, bestDeliver, beliefs);
-    if (chosen) return chosen;
+    // Score each desire independently
+    for (const desire of reaches) {
+        queue.push({ desire, score: scoreReachDesire(desire, beliefs)});
+    }
+    // Score deliver desires independently
+    for (const desire of delivers) {
+        queue.push({ desire, score: scoreDeliverDesire(desire, beliefs)});
+    }
 
     // Fallback to exploration desires
     const explores = (desires.get("EXPLORE") ?? []) as ExploreDesire[];
-    return filterExplore(
-        explores,
-        beliefs.agents.getCurrentMe()?.lastPosition ?? null,
-        beliefs.agents.getObservationDistance(),
-        beliefs.map
-    );
-}
+    const now = Date.now();
+    for (const desire of explores) {
+        queue.push({ desire, score: scoreExplore(
+            desire,
+            beliefs.agents.getCurrentMe()?.lastPosition ?? null,
+            beliefs.map,
+            now
+        ) });
+    }
 
-/**
- * Pick the highest-scoring REACH_PARCEL candidate.
- * @param reaches All generated ReachParcelDesires for this cycle.
- * @param beliefs Current beliefs of the agent.
- * @returns The best candidate, or null if the list is empty.
- */
-function filterReachParcel(reaches: ReachParcelDesire[], beliefs: Beliefs): ReachParcelDesire | null {
-    if (reaches.length === 0) return null;
-    return reaches.reduce((best, d) =>
-        scoreReachDesire(d, beliefs) > scoreReachDesire(best, beliefs) ? d : best
-    );
-}
-
-/**
- * Pick the highest-scoring DELIVER_PARCEL candidate.
- * @param delivers All generated DeliverParcelDesires for this cycle.
- * @param beliefs Current beliefs of the agent.
- * @returns The best candidate, or null if the list is empty.
- */
-function filterDeliverParcel(delivers: DeliverParcelDesire[], beliefs: Beliefs): DeliverParcelDesire | null {
-    if (delivers.length === 0) return null;
-    return delivers.reduce((best, d) =>
-        scoreDeliverDesire(d, beliefs) > scoreDeliverDesire(best, beliefs) ? d : best
-    );
-}
-
-/**
- * Given the best REACH_PARCEL and DELIVER_PARCEL candidates, select the one with the highest score.
- * @param reach The best REACH_PARCEL desire.
- * @param deliver The best DELIVER_PARCEL desire.
- * @param beliefs Current beliefs of the agent, used for scoring the desires.
- * @returns The chosen desire, or null if no candidates are available.
- */
-function chooseReachOrDeliver( reach: ReachParcelDesire | null, deliver: DeliverParcelDesire | null, beliefs: Beliefs): NavigationDesire | null {
-    // If both are null return null
-    if (!reach && !deliver) return null;
-
-    // If only one is available, return it
-    if (!reach) return deliver;
-    if (!deliver) return reach;
-
-    // If both are available, score and compare
-    const reachScore = scoreReachDesire(reach, beliefs);
-    const deliverScore = scoreDeliverDesire(deliver, beliefs);
-    return reachScore >= deliverScore ? reach : deliver;
+    return queue.sort((a, b) => getPriorityForDesire(b.desire) - getPriorityForDesire(a.desire) || b.score - a.score);
 }
 
 /**
@@ -146,7 +126,6 @@ function scoreDeliverDesire(
 export function filterExplore(
     explores: ExploreDesire[],
     agentPos: { x: number; y: number } | null,
-    observationDistance: number | null,
     mapBeliefs: MapBeliefs
 ): ExploreDesire {
     // If we don't know our position, return the first explore desire
@@ -172,10 +151,12 @@ export function filterExplore(
  */
 function scoreExplore(
     desire: ExploreDesire,
-    agentPos: { x: number; y: number },
+    agentPos: { x: number; y: number } | null,
     mapBeliefs: MapBeliefs,
     now: number
 ): number {
+    if (!agentPos) return 0; // If we don't know our position, we can't calculate a meaningful score, so return 0.
+
     // Get spawn tile distance and age since last sensing
     const distance = manhattanDistance(desire.target, agentPos);
     const lastSensing = mapBeliefs.getSpawnTileSensingTime(desire.target);

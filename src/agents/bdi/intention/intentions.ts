@@ -1,9 +1,9 @@
 import { aStar } from "../navigation/a_star.js";
 import type { Beliefs } from "../belief/beliefs.js";
 import type {  GeneratedDesires } from "../../../models/desires.js";
-import type { Intention } from "../../../models/intentions.js";
+import type { Intention, IntentionQueue } from "../../../models/intentions.js";
 import type { Position } from "../../../models/position.js";
-import { getBestDesire } from "../desire/desire_filter.js";
+import { getIntentionQueue } from "../desire/desire_filter.js";
 
 /**
  * Given the current position and a target position, computes the direction of next step
@@ -24,7 +24,7 @@ function posToDirection(from: Position, to: Position): string {
  */
 export class Intentions {
     private currentIntention: Intention | null = null;
-    private desires: GeneratedDesires = new Map();
+    private intentionsQueue: IntentionQueue = [];
 
     /**
      * Called each deliberation cycle.
@@ -33,23 +33,23 @@ export class Intentions {
      * @param desires - The current desires of the agent
      */
     update(beliefs: Beliefs, desires: GeneratedDesires): void {
-        // If no desires, drop current intention
+        // If no desires, drop current intentions
         if (desires.size === 0) {
-            this.currentIntention = null;
+            this.intentionsQueue = [];
             return;
         }
 
         // Update desires in the intention manager
-        this.desires = desires;
+        this.intentionsQueue = getIntentionQueue(desires, beliefs);
 
         // Get current position from beliefs
         const me = beliefs.agents.getCurrentMe();
         if (!me?.lastPosition) return;
 
         // Validate current intention
-        if (!this.validateCurrentIntention(beliefs)) {
-            // Pick the best desire that has a reachable path; skip unreachable ones
-            this.selectIntention(beliefs);
+        if (!this.validateCurrentIntention()) {
+            // Cleans the unreachable desire
+            this.filterIntention(beliefs);
             // Already generated a valid path for the new intention
             return;
         }
@@ -73,12 +73,13 @@ export class Intentions {
      * Validates if the current intention is still valid based on the current desires and beliefs.
      * @returns true if the current intention is still valid, false otherwise.
      */
-    private validateCurrentIntention(beliefs: Beliefs): boolean {
+    private validateCurrentIntention(): boolean {
         // If there is no current intention, it's not valid
         if (!this.currentIntention) return false;
 
         // Check if the desire of the current intention is still the top desire
-        const topDesire = getBestDesire(this.desires, beliefs);
+        const topDesire = this.intentionsQueue[0]?.desire;
+        if (!topDesire) return false;
         const intentionDesire = this.currentIntention.desire;
 
         // First check if the desire type is still the same
@@ -173,14 +174,9 @@ export class Intentions {
      * @param beliefs - The current beliefs of the agent, used to validate paths.
      * @returns void, but updates the current intention to the selected desire and its path, or null if no valid intention is found.
      */
-    private selectIntention(beliefs: Beliefs): void {
-        // Helper function to check if there are any desires left to consider
-        const hasCandidates = () => [...this.desires.values()].some(arr => arr.length > 0);
-
+    private filterIntention(beliefs: Beliefs): void {
         // Loop through desires in priority order until we find one with a valid path
-        while (hasCandidates()) {
-            // Get the best desire based on the current beliefs
-            const desire = getBestDesire(this.desires, beliefs);
+        for (const { desire } of this.intentionsQueue) {
 
             // Immediate desires don't need pathfinding
             if (desire.type === 'PICKUP_PARCEL' || desire.type === 'PUTDOWN_PARCEL') {
@@ -195,9 +191,9 @@ export class Intentions {
             // If a valid path is found, we can keep this intention
             if (this.currentIntention !== null) return; 
 
-            // If no valid path is found, remove this desire from consideration and try the next one
-            this.removeDesireFromIntention(); 
-
+            // If no valid path is found, the best intention is dropped
+            this.intentionsQueue = this.intentionsQueue.filter(entry => entry.desire !== desire);
+            
         }
 
         // If we exhaust all desires without finding a valid path, drop the intention
@@ -288,20 +284,5 @@ export class Intentions {
         }
         // Drop the current intention so that it will be reconsidered in the next deliberation cycle
         this.currentIntention = null;
-    }
-
-    /**
-     * Removes the current intention's desire from the desires list, used when an intention is found to be unreachable to avoid reconsidering it in the next cycle.
-      * @returns void, but updates the desires by removing the current intention's desire from the desires list.
-     */
-    removeDesireFromIntention(): void {
-        if (!this.currentIntention) return;
-
-        const desire = this.currentIntention.desire;
-        // Remove the unreachable desire from current desires
-        const desireTypeArray = this.desires.get(desire.type);
-        if (!desireTypeArray) return;
-        desireTypeArray.splice(desireTypeArray.indexOf(desire), 1);
-        if (desireTypeArray.length === 0) this.desires.delete(desire.type);
     }
 }
