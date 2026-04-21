@@ -1,7 +1,7 @@
 import type { Agent } from "../../../models/agent.js";
 import type { PlayerSettings } from "../../../models/config.js";
 import type { IOAgent } from "../../../models/djs.js";
-import { Direction, DirectionPrediction, Position } from "../../../models/position.js";
+import { Position, PositionPrediction } from "../../../models/position.js";
 import { Memory } from "./utils/memory.js";
 import { Tracker } from "./utils/tracker.js";
 
@@ -13,7 +13,7 @@ export class AgentBeliefs {
     private me: Agent | null = null;                        // Current self-belief, updated directly from observations, without memory
     private friends = new Tracker<Agent>();                 // Tracker of friend agents, keyed by ID, without memory
     private enemies = new Tracker<Agent>(true);             // Tracker of enemy agents, keyed by ID, keeping only the latest observation for each enemy, without memory, keeping half positions
-    private enemiesMemory = new Memory<Agent>(1_000, 10);   // Memory of enemy agents, keyed by ID, with TTL-based eviction
+    private enemiesMemory = new Memory<Agent>(1_000, 20);   // Memory of enemy agents, keyed by ID, with TTL-based eviction
     private playerSettings: PlayerSettings | null = null;   // Player settings from config
 
     // Memory management - EvictInterval prevents the agent from evicting stale beliefs too frequently,
@@ -49,7 +49,6 @@ export class AgentBeliefs {
      * @param sensedAgents List of all observed agents from the latest observation, used to update beliefs about friends and enemies.
      */
     updateOtherAgents(sensedAgents: IOAgent[], sensedPositions: Position[]): void {
-
         sensedAgents.forEach(agent => {                           // Create a new Agent belief from the observed IOAgent data
             const data: Agent = {
                 id: agent.id,
@@ -123,36 +122,36 @@ export class AgentBeliefs {
      * @param id Enemy agent ID
      * @returns Direction prediction with confidence score, or null if insufficient history
      */
-    //#TODO: Right now is basic majority vote
-    predictEnemyDirection(id: string): DirectionPrediction | null {
+    //#TODO Majority vote and not timestamp aware
+    predictEnemyNextPosition(id: string): PositionPrediction | null {
         // If I have a tracking for this enemy, use its history to predict
         if(!this.enemies.getCurrent(id)?.lastPosition) return null;
 
         // If the enemy is in an half position (not fully in a tile), we can predict that it's moving in the direction of the half position
         const lastPos = this.enemies.getCurrent(id)!.lastPosition!;
         if (!Number.isInteger(lastPos.x) || !Number.isInteger(lastPos.y)) {
-            let dir: Direction;
-            // If the x coordinate is not an integer, the movement is horizontal, and the direction depends on whether the half position is in the left or right half of the tile. If the y coordinate is not an integer, the movement is vertical, and the direction depends on whether the half position is in the upper or lower half of the tile.
-            if (!Number.isInteger(lastPos.x)) dir = lastPos.x % 1 < 0.5 ? 'right' : 'left';
-            else dir = lastPos.y % 1 < 0.5 ? 'down' : 'up';
+            let nextPos: PositionPrediction;
+            // Round the half position to the nearest tile in the direction of movement
+            if (!Number.isInteger(lastPos.x)) nextPos = { position: { x: Math.round(lastPos.x), y: lastPos.y }, confidence: 1.0 };
+            else nextPos = { position: { x: lastPos.x, y: Math.round(lastPos.y) }, confidence: 1.0 };
             // Return with max confidence
-            return { direction: dir, confidence: 1.0 };
+            return nextPos;
         }
 
         // Get the history of observed positions for the specified enemy agent
         const history = this.enemiesMemory.getHistory(id);
-        if (history.length < 2) return null;
+        if (history.length < 5) return null;
 
-        const positions = history.map(o => o.value.lastPosition);
-        // Analyze consecutive position pairs to vote on movement direction, while ignoring ambiguous diagonal movements
-        const votes = new Map<Direction, number>();
-        // Track the last valid direction to break ties in case of equal votes
-        let lastValidDir: Direction = 'stationary';
-        // Count of valid position pairs that contribute to the direction prediction, used for confidence calculation
+        // Retrieve positions from the history of observations
+        const positions = history.map(observation => observation.value.lastPosition);
+        const votes = new Map<string, { position: Position; count: number }>();
+        // Variable to track the last valid position (not diagonal)
+        let lastValidNextPosition: Position = { x: lastPos.x, y: lastPos.y };
         let totalValidPairs = 0;
 
         // Iterate through consecutive position pairs to determine movement direction
         for (let i = 0; i < positions.length - 1; i++) {
+            // Retrieve consecutive positions from the history
             const a = positions[i];
             const b = positions[i + 1];
             if (a === null || b === null) continue;
@@ -165,37 +164,39 @@ export class AgentBeliefs {
             // Only consider valid movements in cardinal directions or stationary, and ignore any pairs that suggest diagonal movement which cannot be clearly categorized
             totalValidPairs++;
 
-            // Determine the movement direction based on the change in coordinates
-            let dir: Direction;
-            if (dx === 0 && dy === 0)    dir = 'stationary';
-            else if (dy < 0)             dir = 'down';
-            else if (dy > 0)             dir = 'up';
-            else if (dx < 0)             dir = 'left';
-            else                         dir = 'right';
+            // The next position is determined by applying the movement direction (dx, dy) 
+            const nextPosition: Position = { x: b.x + dx, y: b.y + dy };
 
             // Vote for the determined direction based on this position pair
-            votes.set(dir, (votes.get(dir) ?? 0) + 1);
-            lastValidDir = dir;
+            const key = `${nextPosition.x},${nextPosition.y}`;
+            const existing = votes.get(key);
+            if (existing) existing.count += 1;
+            else votes.set(key, { position: nextPosition, count: 1 });
+            lastValidNextPosition = nextPosition;
         }
 
-        // If no valid position pairs were found, we cannot make a prediction
-        if (totalValidPairs === 0) return null;
+        // If no valid position pairs were found, we cannot make a prediction or are less than 5 observations
+        if (totalValidPairs < 5) return null;
 
-        let winner: Direction = 'stationary';
+        let winner: Position = { x: lastPos.x, y: lastPos.y };
         let maxVotes = 0;
-        // Determine the direction with the most votes, and calculate confidence as the proportion of votes for that direction out of total valid pairs
-        for (const [dir, count] of votes) {
-            if (count > maxVotes) { winner = dir; maxVotes = count; }
+        // Determine the next position with the most votes, and calculate confidence as the proportion of votes for that direction out of total valid pairs
+        for (const { position, count } of votes.values()) {
+            if (count > maxVotes) { winner = position; maxVotes = count; }
         }
 
         // If there's a tie in votes, use the last valid direction as a tiebreaker, since it reflects the most recent observed movement trend
-        const tied = [...votes.entries()].filter(([, c]) => c === maxVotes);
-        if (tied.length > 1) winner = lastValidDir;
+        const tied = [...votes.values()].filter(({ count }) => count === maxVotes);
+        if (tied.length > 1) winner = lastValidNextPosition;
 
         // Return the predicted direction along with a confidence score, which is the ratio of votes for the winning direction to the total number of valid position pairs analyzed
-        return { direction: winner, confidence: maxVotes / totalValidPairs };
+        return { position: winner, confidence: maxVotes / totalValidPairs };
     }
 
+    /**
+     * Get the carry capacity from the player settings.
+     * @returns The carry capacity, or null if settings are not yet received.
+     */
     getCarryCapacity(): number | null {
         return this.playerSettings?.carry_capacity ?? null;
     }

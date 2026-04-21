@@ -2,7 +2,7 @@ import { aStar } from "../navigation/a_star.js";
 import type { Beliefs } from "../belief/beliefs.js";
 import type {  GeneratedDesires } from "../../../models/desires.js";
 import type { Intention } from "../../../models/intentions.js";
-import type { DirectionPrediction, Position } from "../../../models/position.js";
+import type { Position } from "../../../models/position.js";
 import { getBestDesire } from "../desire/desire_filter.js";
 
 /**
@@ -16,22 +16,6 @@ function posToDirection(from: Position, to: Position): string {
     if (to.x < from.x) return 'left';
     if (to.y > from.y) return 'up';
     return 'down';
-}
-
-/**
- * Applies a direction to a position, returning the new position.
- * @param pos - The original position
- * @param direction - The direction to apply ('up', 'down', 'left', 'right')
- * @returns The new position after applying the direction, or null if the direction is invalid.
- */
-function applyDirection(pos: Position, direction: string): Position | null {
-    switch (direction) {
-        case 'up': return { x: pos.x, y: pos.y + 1 };
-        case 'down': return { x: pos.x, y: pos.y - 1 };
-        case 'left': return { x: pos.x - 1, y: pos.y };
-        case 'right': return { x: pos.x + 1, y: pos.y };
-        default: return null;
-    }
 }
 
 /**
@@ -66,10 +50,11 @@ export class Intentions {
         if (!this.validateCurrentIntention(beliefs)) {
             // Pick the best desire that has a reachable path; skip unreachable ones
             this.selectIntention(beliefs);
+            // Already generated a valid path for the new intention
             return;
         }
 
-        // Validate current path
+        // Validate current path if there is an active intention
         if (!this.validatePath(beliefs)) {
             // Replan the path
             this.plan(beliefs);
@@ -125,14 +110,17 @@ export class Intentions {
         const me = beliefs.agents.getCurrentMe();
         if (!me?.lastPosition) return false;
 
-        // Check if the next step is blocked by a known agent
-        if (this.isNextStepBlockedByAgent(beliefs)) {
-            beliefs.map.markBlocked(this.currentIntention.path[0]);
-            return false;
-        }
-
         // If after replanning the path is empty, it's not valid
         if (this.currentIntention.path.length === 0) return false;
+
+        // Check if the path is still walkable according to beliefs
+        let currentPos = me.lastPosition;
+        for (const nextPos of this.currentIntention.path) {
+            if (!beliefs.map.isWalkable(currentPos, nextPos)) {
+                return false;
+            }
+            currentPos = nextPos;
+        }
 
         // The current path is still valid
         return true;
@@ -161,11 +149,12 @@ export class Intentions {
             if (pos.x === next.x && pos.y === next.y) return true;
 
             // Enemy adjacent to the next step that is going to move onto it in the next turn with high confidence
-            const direction = beliefs.agents.predictEnemyDirection(enemy.id);
-            if (direction && direction.confidence >= 0.5) {
-                const predictedPos = applyDirection(pos, direction.direction);
-                if (predictedPos && predictedPos.x === next.x && predictedPos.y === next.y) {
-                    return true;
+            if ((Math.abs(pos.x - next.x) + Math.abs(pos.y - next.y)) <= 1) {
+                const predictedPosition = beliefs.agents.predictEnemyNextPosition(enemy.id);
+                if (predictedPosition && predictedPosition.confidence >= 0.5) {
+                    if (predictedPosition.position.x === next.x && predictedPosition.position.y === next.y) {
+                        return true;
+                    }
                 }
             }
         }
@@ -261,6 +250,7 @@ export class Intentions {
         if (this.currentIntention.path.length === 0) return null;
         // Ensure the path is still valid before trying to get the next action
         if(this.isNextStepBlockedByAgent(beliefs)) {
+            beliefs.map.markBlocked(this.currentIntention.path[0]);
             return null;
         }
         // Get the next step in the path
@@ -286,7 +276,6 @@ export class Intentions {
 
     /**
      * Invalidates the current path by marking the next step as temporarily blocked in beliefs and dropping the current intention.
-      * This is called when the agent attempts to move but finds the path is blocked, so we want to avoid replanning the same path immediately and instead mark it as blocked for a short time.
       * @param beliefs The current beliefs of the agent, used to mark the next step as temporarily blocked.
       * @returns void, but updates beliefs to mark the next step as blocked and drops the current intention.
      */
