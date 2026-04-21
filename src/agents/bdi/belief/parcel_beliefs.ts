@@ -91,9 +91,14 @@ export class ParcelBeliefs {
     updateParcels(sensedParcels: IOParcel[], sensedPositions: Position[]): void {
         this.updateSensedParcels(sensedParcels);
 
+        // Invalidate lastPosition for parcels not currently visible but whose last known position is in view.
+        // This must run every sensing cycle and must not be throttled by reward decay timing.
+        this.parcels.invalidateAtSensedPositions(sensedParcels, sensedPositions);
+
         // Guard clause to prevent decaying rewards too frequently (only decay once per decay interval)
         const now = Date.now();
         const decayInterval = this.parcelSettings?.reward_decay_interval || 0;
+        if (decayInterval <= 0) return;
         if (now - this.lastScoreUpdate < decayInterval) return; 
         
         // Update the last score update timestamp to the current time
@@ -102,8 +107,6 @@ export class ParcelBeliefs {
         // Update beliefs for parcels that are not currently sensed
         this.applyRewardDecay(sensedParcels, decayInterval, now);
 
-        // Invalidate lastPosition for parcels not currently visible but whose last known position is in view
-        this.parcels.invalidateAtSensedPositions(sensedParcels, sensedPositions);
     }
 
     /**
@@ -132,15 +135,30 @@ export class ParcelBeliefs {
     }
 
     /**
+     * Mark parcels as picked up based on the server's acknowledgment of a pickup action.
+     * @param parcel The parcel that was attempted to be picked up, used to update beliefs by marking it as carried by the agent and maintaining its last known position.
+     * @returns 
+     */
+    markPickup(parcel: Parcel): void {
+        if (!parcel.id) return;
+        if (!parcel.lastPosition) return;
+
+        this.parcels.updateValuePreservingTimestamp(parcel.id, {
+            ...parcel,
+            carriedBy: parcel.carriedBy,
+            lastPosition: { x: parcel.lastPosition.x, y: parcel.lastPosition.y },
+        });
+    }
+
+    /**
      * Remove parcels from beliefs that are known to have been delivered based on a list of delivered parcel IDs.
      * @param deliveredParcels An array of parcels that have been delivered, used to clean up beliefs by removing them from memory. 
      * @returns void
      */
     cleanDeliveredParcels(deliveredParcels: Parcel[]): void {
-        const deliveredParcelIds = deliveredParcels.map(p => p.id);
-        deliveredParcelIds.forEach(id => {
-            this.parcels.delete(id);
-            this.lastDecayApplied.delete(id);
-        });
-    }   
-}
+        for (const parcel of deliveredParcels) {
+            this.parcels.delete(parcel.id);
+            this.lastDecayApplied.delete(parcel.id);
+        }
+    }
+}   

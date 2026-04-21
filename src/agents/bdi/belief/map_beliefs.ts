@@ -68,6 +68,9 @@ export class MapBeliefs {
      * @returns True if the position is walkable, false otherwise.
      */
     isWalkable(from: Position, to: Position): boolean {
+        // Only adjacent tiles can be walked to, to avoid inconsistencies in a sensing
+        if (manhattanDistance(from, to) !== 1) return false;
+
         const tile = this.getTileAt(to);
 
         // If there's no tile (out of bounds) or it's a wall, it's not walkable
