@@ -19,6 +19,8 @@ function posToDirection(from: Position, to: Position): string {
     return 'down';
 }
 
+const DETOUR_THRESHOLD = 6; // Maximum detour length to prefer detouring over waiting, in number of steps
+
 /**
  * Manages the agent's current intention: validates the plan on each sensing cycle,
  * replans via A* when needed, and exposes the next direction to execute.
@@ -140,8 +142,8 @@ export class Intentions {
      */
     private startBlockedTileWait(pos: Position): void {
         this.waitingTile = pos;
-        // Start a random counter between 1 and 3
-        this.waitingCounter = Math.floor(Math.random() * 3) + 1;
+        // Start a random counter between 5 and 15
+        this.waitingCounter = Math.floor(Math.random() * 11) + 5;
     }
 
     /**
@@ -208,14 +210,6 @@ export class Intentions {
                 predicted.position.x === next.x && predicted.position.y === next.y) {
                 return true;
             }
-
-            // Mark the next tile as blocked if we have low-confidence and adjacent observations of an enemy, and if is not stationary
-            if (predicted && predicted.confidence < 0.5 &&
-                ((xs.includes(predicted.position.x) && ys.includes(predicted.position.y)) ||
-                (xs.includes(pos.x) && ys.includes(pos.y))) &&
-                predicted.position.x !== pos.x && predicted.position.y !== pos.y) {
-                return false;
-            } 
         }
         // No known agents are currently blocking the next step
         return false;
@@ -250,6 +244,33 @@ export class Intentions {
 
         // If we exhaust all desires without finding a valid path, drop the intention
         this.currentIntention = null;
+    }
+
+    /**
+     * Computes an alternative path that bypasses the given blocked tile.
+     * Used to evaluate whether a detour is cheaper than waiting for the tile to clear.
+     * @param blockedTile The position of the tile that is currently blocked and we want to bypass.
+     * @param beliefs The current beliefs of the agent, used to compute the path.
+     * @returns An alternative path that bypasses the blocked tile, or null if no such path exists or if there is no current intention with a target.
+     */
+    private computeDetourPath(blockedTile: Position, beliefs: Beliefs): Position[] | null {
+        if (!this.currentIntention) return null;
+        if (!('target' in this.currentIntention.desire)) return null;
+        const me = beliefs.agents.getCurrentMe();
+        if (!me?.lastPosition) return null;
+
+        return aStar(me.lastPosition, this.currentIntention.desire.target, (from, to) => {
+            if (to.x === blockedTile.x && to.y === blockedTile.y) return false;
+            return beliefs.map.isWalkable(from, to);
+        });
+    }
+
+    /**
+     * Returns true if the given detour path is short enough to prefer over waiting.
+     */
+    private shouldDetour(detourPath: Position[]): boolean {
+        const currentLength = this.currentIntention?.path.length ?? Infinity;
+        return detourPath.length <= currentLength + DETOUR_THRESHOLD;
     }
 
     /**
@@ -301,7 +322,14 @@ export class Intentions {
         if (this.currentIntention.path.length === 0) return null;
         // Ensure the path is still valid before trying to get the next action
         if (this.isNextStepBlockedByAgent(beliefs)) {
-            this.tryMarkBlocked(this.currentIntention.path[0], beliefs);
+            const blockedTile = this.currentIntention.path[0];
+            const detour = this.computeDetourPath(blockedTile, beliefs);
+            if (detour && this.shouldDetour(detour)) {
+                this.currentIntention.path = detour;
+                this.resetBlockedTileWait();
+                return posToDirection(from, detour[0]);
+            }
+            this.tryMarkBlocked(blockedTile, beliefs);
             return 'wait';
         }
         // Get the next step in the path
@@ -339,6 +367,7 @@ export class Intentions {
 
         if (failedIntention && failedIntention.path.length > 0) {
             this.tryMarkBlocked(failedIntention.path[0], beliefs);
+            beliefs.map.markBlocked(failedIntention.path[0]);
         }
 
         this.currentIntention = null;

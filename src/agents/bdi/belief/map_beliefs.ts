@@ -191,7 +191,7 @@ export class MapBeliefs {
      * @param pos The position to mark as blocked
      * @param ttl How long to keep the tile blocked in milliseconds (default 3000ms)
      */
-    markBlocked(pos: Position, ttl = 1_000): void {
+    markBlocked(pos: Position, ttl = 2_000): void {
         this.temporaryBlocked.set(`${pos.x},${pos.y}`, Date.now() + ttl);
     }
 
