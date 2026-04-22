@@ -135,7 +135,7 @@ export class BDIAgent {
 
         if (move === null) {
             if (this.debug) console.log("[EXECUTE] No safe move to execute.");
-            return this.intentions.getCurrentIntention() !== null;
+            return false;
         }
 
         let succeeded = false;
@@ -199,7 +199,7 @@ export class BDIAgent {
         try {
             while (this.executing) {
                 const shouldContinue = await this.execute();
-                if (!shouldContinue) break;
+                if (!shouldContinue) await new Promise(r => setTimeout(r, 200));
             }
         }
         catch (err) {

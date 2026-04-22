@@ -19,7 +19,7 @@ function posToDirection(from: Position, to: Position): string {
     return 'down';
 }
 
-const DETOUR_THRESHOLD = 6; // Maximum detour length to prefer detouring over waiting, in number of steps
+const DETOUR_THRESHOLD = 5; // Maximum detour length to prefer detouring over waiting, in number of steps
 
 /**
  * Manages the agent's current intention: validates the plan on each sensing cycle,
@@ -28,8 +28,11 @@ const DETOUR_THRESHOLD = 6; // Maximum detour length to prefer detouring over wa
 export class Intentions {
     private currentIntention: Intention | null = null;
     private intentionsQueue: IntentionQueue = [];
-    private waitingCounter: number = 0;
+    private waitingUntil: number = 0;
     private waitingTile: Position | null = null;
+    private waitingStarted: number = 0;
+    private invalidationTile: Position | null = null;
+    private invalidationCount: number = 0;
 
     /**
      * Called each deliberation cycle.
@@ -133,7 +136,10 @@ export class Intentions {
      */
     private resetBlockedTileWait(): void {
         this.waitingTile = null;
-        this.waitingCounter = 0;
+        this.waitingUntil = 0;
+        this.waitingStarted = 0;
+        this.invalidationTile = null;
+        this.invalidationCount = 0;
     }
 
     /**
@@ -142,8 +148,9 @@ export class Intentions {
      */
     private startBlockedTileWait(pos: Position): void {
         this.waitingTile = pos;
-        // Start a random counter between 5 and 15
-        this.waitingCounter = Math.floor(Math.random() * 11) + 5;
+        this.waitingStarted = Date.now();
+        // Random wait between 1 and 3 seconds (0ms case removed to prevent instant mark)
+        this.waitingUntil = Date.now() + (Math.floor(Math.random() * 3) + 1) * 1000;
     }
 
     /**
@@ -163,9 +170,10 @@ export class Intentions {
             this.startBlockedTileWait(tile);
         // If we are already waiting for this tile, decrement the counter and mark as blocked if it reaches zero
         } else {
-            this.waitingCounter--;
-            if (this.waitingCounter <= 0) {
-                beliefs.map.markBlocked(tile);
+            // Decrementing the counter is implicitly handled by checking the waitingUntil timestamp against the current time
+            if (this.waitingUntil <= Date.now()) {
+                const observedBlockDuration = Date.now() - this.waitingStarted;
+                beliefs.map.markBlocked(tile, observedBlockDuration/3);
                 // After marking the tile as blocked, we should drop the current intention and replan
                 this.update(beliefs, generateDesires(beliefs));
                 this.resetBlockedTileWait();
@@ -269,6 +277,7 @@ export class Intentions {
      * Returns true if the given detour path is short enough to prefer over waiting.
      */
     private shouldDetour(detourPath: Position[]): boolean {
+        if (detourPath.length === 0) return false;
         const currentLength = this.currentIntention?.path.length ?? Infinity;
         return detourPath.length <= currentLength + DETOUR_THRESHOLD;
     }
@@ -324,7 +333,8 @@ export class Intentions {
         if (this.isNextStepBlockedByAgent(beliefs)) {
             const blockedTile = this.currentIntention.path[0];
             const detour = this.computeDetourPath(blockedTile, beliefs);
-            if (detour && this.shouldDetour(detour)) {
+            if (detour && detour.length > 0 && this.shouldDetour(detour)) {
+                beliefs.map.markBlocked(blockedTile);
                 this.currentIntention.path = detour;
                 this.resetBlockedTileWait();
                 return posToDirection(from, detour[0]);
@@ -366,8 +376,35 @@ export class Intentions {
         const failedIntention = this.currentIntention;
 
         if (failedIntention && failedIntention.path.length > 0) {
-            this.tryMarkBlocked(failedIntention.path[0], beliefs);
-            beliefs.map.markBlocked(failedIntention.path[0]);
+            const blockedTile = failedIntention.path[0];
+
+            const sameTile =
+                this.invalidationTile &&
+                this.invalidationTile.x === blockedTile.x &&
+                this.invalidationTile.y === blockedTile.y;
+            if (sameTile) {
+                this.invalidationCount++;
+            } else {
+                this.invalidationTile = blockedTile;
+                this.invalidationCount = 1;
+            }
+
+            if (this.invalidationCount > 2) {
+                const observedBlockDuration = this.waitingStarted > 0
+                    ? Date.now() - this.waitingStarted
+                    : 1_000;
+                beliefs.map.markBlocked(blockedTile, observedBlockDuration);
+                this.resetBlockedTileWait();
+            } else {
+                const detour = this.computeDetourPath(blockedTile, beliefs);
+                if (detour && detour.length > 0 && this.shouldDetour(detour)) {
+                    beliefs.map.markBlocked(blockedTile);
+                    failedIntention.path = detour;
+                    this.resetBlockedTileWait();
+                    return;
+                }
+                this.tryMarkBlocked(blockedTile, beliefs);
+            }
         }
 
         this.currentIntention = null;
