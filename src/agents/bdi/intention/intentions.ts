@@ -4,7 +4,7 @@ import type { DesireType, GeneratedDesires } from "../../../models/desires.js";
 import type { Intention, IntentionQueue } from "../../../models/intentions.js";
 import type { Position } from "../../../models/position.js";
 import { generateDesires } from "../desire/desire_generator.js";
-import { getIntentionQueue } from "../desire/desire_filter.js";
+import { getIntentionQueue } from "../desire/desire_sorter.js";
 
 /**
  * Given the current position and a target position, computes the direction of next step
