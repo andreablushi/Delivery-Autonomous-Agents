@@ -180,10 +180,10 @@ export class BDIAgent {
 
         // Update intentions based on whether the action succeeded or failed
         if (succeeded) {
-            this.intentions.shiftPath(this.beliefs);
+            this.intentions.shiftPath();
         }
         else {
-            this.intentions.invalidatePath(this.beliefs);
+            this.intentions.invalidatePath();
         }
         // Return whether we still have an intention to execute after this step
         return this.intentions.getCurrentIntention() !== null;

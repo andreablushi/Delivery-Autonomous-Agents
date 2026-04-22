@@ -9,10 +9,10 @@ async function main() {
     const debug = process.env.NODE_ENV === "development";
     const isCompetitive = process.env.COMPETITIVE === "true";
 
-    // Always start the main agent
+    // Otherwise start the single main agent.
     await startSingleAgent(debug);
 
-    // If competitive mode is enabled, start additional agents using TOKEN_1, TOKEN_2, ...
+    // In competitive mode, only start the competitive agents.
     if (isCompetitive) {
         await startCompetitiveAgents(debug);
         return;
@@ -24,8 +24,8 @@ async function main() {
  * @param debug Whether to enable debug logging for the agent.
  */
 async function startSingleAgent(debug: boolean): Promise<void> {
-    const socket: any = await connect();
-    new BDIAgent(socket, debug);
+    const socket: any = await Promise.all([connect(process.env.TOKEN)]);
+    new BDIAgent(socket[0], debug);
 }
 
 /**
