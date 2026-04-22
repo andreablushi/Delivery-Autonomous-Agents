@@ -8,6 +8,10 @@ import { exit } from "node:process";
 async function main() {
     // Determine if the application is running in development mode for debugging purposes
     const debug = process.env.NODE_ENV === "development";
+    
+    // Connect to the server and create a single BDI agent with the connection
+    const socket: any = await connect();
+    new BDIAgent(socket, debug);
 
     // Check if the application is set to run in competitive debug mode
     if (process.env.COMPETITIVE === "true") {
@@ -29,10 +33,6 @@ async function main() {
         const sockets = await Promise.all(tokens.map(connect));
         // Run without debug mode 
         sockets.forEach(socket => new BDIAgent(socket, false));
-    } else {
-        // Connect to the server and create a single BDI agent with the connection
-        const socket: any = await connect();
-        new BDIAgent(socket, debug);
     }
 }
 
