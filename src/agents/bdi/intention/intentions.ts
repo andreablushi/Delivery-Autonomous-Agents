@@ -7,15 +7,7 @@ import { generateDesires } from "../desire/desire_generator.js";
 import { sameDesire } from "./utils/helpers.js";
 import { getIntentionQueue } from "../desire/desire_sorter.js";
 import { posToDirection } from "../../../utils/metrics.js";
-import { CollisionTimer } from "./utils/collision_timer.js";
-
-// Intention management constants
-export const DETOUR_THRESHOLD_STEPS = 5;                // Maximum number of steps for a detour to be considered preferable over waiting
-export const BLOCKED_AFTER_EXPIRATION_TTL_MS = 2_000;   // TTL for marking a tile as blocked after waiting for it to clear, or after a failed detour attempt
-export const INVALIDATION_BLOCKED_TTL_MS = 1_000;       // TTL for marking a tile as blocked after repeated failed invalidation attempts
-export const WAIT_MIN_MS = 1_000;                       // Minimum wait time before marking a tile as blocked
-export const WAIT_MAX_MS = 1_500;                       // Maximum wait time before marking a tile as blocked
-export const INVALIDATION_RETRY_LIMIT = 2;              // Number of times to retry invalidating a tile before marking it as blocked in beliefs to avoid getting stuck
+import { CollisionManager } from "./utils/collision_manager.js";
 
 /**
  * Manages the agent's current intention: validates the plan on each sensing cycle,
@@ -28,8 +20,7 @@ export class Intentions {
     private beliefs!: Beliefs; //#TODO: Could create errors maybe
 
     // Collision management state
-    private collisionTimer = new CollisionTimer();
-    private invalidationCounter = 0;
+    private collision = new CollisionManager();
 
     /**
      * Called each deliberation cycle.
@@ -192,46 +183,14 @@ export class Intentions {
      */
     private commitBlocked(tile: Position, ttl: number): void {
         this.beliefs.map.markBlocked(tile, ttl);
-        this.collisionTimer.reset();
-        this.invalidationCounter = 0;
+        this.collision.reset();
         // After marking the tile as blocked, we should drop the current intention and replan
         this.update(this.beliefs, generateDesires(this.beliefs));
     }
 
     /**
-     * Applies deferred blocking to a tile: starts a random counter on first call for that tile,
-     * counts repeated detections, and commits the block once either the counter or timer threshold is exceeded.
-     * @param tile The position of the tile to potentially mark as blocked.
-     */
-    private tryMarkBlocked(tile: Position): void {
-        // If we're not already waiting for this tile, start the collision timer
-        if (!this.collisionTimer.isWaitingFor(tile)) {
-            this.collisionTimer.start(tile, WAIT_MIN_MS, WAIT_MAX_MS);
-        } else {
-            // Count each repeated pre-detection for the same tile so the limiter
-            // works regardless of whether blocks are caught before or after a move attempt.
-            this.invalidationCounter++;
-        }
-
-        // If the counter exceeds the retry limit, skip the remaining timer and force-mark
-        // the tile immediately — same escalation used in invalidatePath for move failures.
-        if (this.invalidationCounter > INVALIDATION_RETRY_LIMIT) {
-            this.commitBlocked(tile, INVALIDATION_BLOCKED_TTL_MS);
-            return;
-        }
-
-        // If the timer hasn't expired yet, we wait before marking the tile as blocked
-        if (!this.collisionTimer.hasExpired()) {
-            return;
-        }
-
-        // Once the timer has expired, we consider the tile blocked and mark it in beliefs, then reset the waiting state
-        this.commitBlocked(tile, BLOCKED_AFTER_EXPIRATION_TTL_MS);
-    }
-
-    /**
-     * Attempts to reroute around a blocked tile. If a detour within DETOUR_THRESHOLD_STEPS
-     * extra steps is found, commits the block and replans the path.
+     * Attempts to reroute around a blocked tile. If a detour within the configured
+     * detour-steps threshold is found, commits the block and replans the path.
      * @param blockedTile The position of the tile that is currently blocked and we want to bypass.
      * @return true if a detour was applied, false if no acceptable detour exists.
      */
@@ -256,12 +215,12 @@ export class Intentions {
         }
 
         // If a path is found, we compare its length to the original path length to decide whether to detour or wait
-        if (path.length > this.currentIntention.path.length + DETOUR_THRESHOLD_STEPS) {
+        if (path.length > this.currentIntention.path.length + this.collision.detourThresholdSteps) {
             return false;
         }
 
         // The detour path is within the acceptable threshold, so we choose to detour
-        this.commitBlocked(blockedTile, BLOCKED_AFTER_EXPIRATION_TTL_MS);
+        this.commitBlocked(blockedTile, this.collision.detourCommitTtl);
         return true;
     }
 
@@ -271,7 +230,7 @@ export class Intentions {
      * @param beliefs - The current beliefs of the agent, used to refresh the intention queue after shifting the path.
      * @returns The next direction to move ('up', 'down', 'left', 'right'), 'wait' if execution should pause, or null if no intention or path is available.
      */
-    getNextAction(from: { x: number; y: number }, beliefs: Beliefs): string | null {
+    getNextAction(from: Position, beliefs: Beliefs): string | null {
         // If there is no current intention, we cannot return a next action
         if (!this.currentIntention) return null;
 
@@ -290,7 +249,8 @@ export class Intentions {
                 // commitBlocked replanned the path, so path[0] is now the first step of the detour
                 return posToDirection(from, this.currentIntention.path[0]);
             }
-            this.tryMarkBlocked(blockedTile);
+            const decision = this.collision.onPreDetection(blockedTile);
+            if (decision.kind === 'block') this.commitBlocked(blockedTile, decision.ttl);
             return 'wait';
         }
         // Compute the direction to the next step
@@ -305,8 +265,7 @@ export class Intentions {
      * @param beliefs The current beliefs of the agent, used to refresh the intention queue after shifting the path.
      */
     shiftPath(): void {
-        this.collisionTimer.reset();
-        this.invalidationCounter = 0;
+        this.collision.reset();
         if (this.currentIntention && this.currentIntention.path.length > 0) {
             this.currentIntention.path.shift();
         }
@@ -328,14 +287,8 @@ export class Intentions {
         // If the failed intention has a path, we consider the first step in the path as the blocked tile that caused the failure
         if (failedIntention && failedIntention.path.length > 0) {
             const blockedTile = failedIntention.path[0];
-            this.invalidationCounter++;
-            // If we've already tried to invalidate this tile multiple times, we mark it as blocked in beliefs to avoid getting stuck
-            if (this.invalidationCounter > INVALIDATION_RETRY_LIMIT) {
-                // Mark the tile as blocked with a short TTL to prevent immediate re-selection, then replan
-                this.commitBlocked(blockedTile, INVALIDATION_BLOCKED_TTL_MS);
-            } else {
-                this.tryMarkBlocked(blockedTile);
-            }
+            const decision = this.collision.onMoveFailure(blockedTile);
+            if (decision.kind === 'block') this.commitBlocked(blockedTile, decision.ttl);
             return;
         }
 

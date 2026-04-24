@@ -1,5 +1,6 @@
 import { Observation } from "../../../../models/memory.js";
 import { Position } from "../../../../models/position.js";
+import { isHalfPosition } from "../../../../utils/metrics.js";
 
 type Positionable = { id: string; lastPosition: Position | null };
 
@@ -28,7 +29,7 @@ export class Tracker<T extends Positionable> {
     update(key: string, value: T): void {
         // Avoid memorizing intermediate positions
         const pos = value.lastPosition;
-        if (pos && (!Number.isInteger(pos.x) || !Number.isInteger(pos.y)) && !this.keepHalfPosition) return;
+        if (pos && isHalfPosition(pos) && !this.keepHalfPosition) return;
         // Store the new value along with the current timestamp
         this.store.set(key, { value, seenAt: Date.now() });
     }
@@ -46,19 +47,10 @@ export class Tracker<T extends Positionable> {
         
         // Avoid memorizing intermediate positions
         const pos = value.lastPosition;
-        if (pos && (!Number.isInteger(pos.x) || !Number.isInteger(pos.y)) && !this.keepHalfPosition) return;
+        if (pos && isHalfPosition(pos) && !this.keepHalfPosition) return;
 
         // Update the object with the new value, keeping old timestamp
         this.store.set(key, { value, seenAt: existing.seenAt });
-    }
-
-    /**
-     * Get the current value for a given id, or undefined if the key does not exist.
-     * @param key id of the object being tracked
-     * @returns The current value for the key, or undefined if the key does not exist.
-     */
-    getCurrent(key: string): T | undefined {
-        return this.store.get(key)?.value;
     }
 
     /**
@@ -67,14 +59,6 @@ export class Tracker<T extends Positionable> {
      */
     getCurrentAll(): T[] {
         return Array.from(this.store.values()).map(o => o.value);
-    }
-
-    /**
-     * Get all keys currently stored in the tracker
-     * @returns An array of all ids currently stored in the tracker.
-     */
-    getKeys(): string[] {
-        return Array.from(this.store.keys());
     }
 
     /**

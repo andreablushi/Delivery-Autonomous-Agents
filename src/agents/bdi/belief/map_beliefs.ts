@@ -4,7 +4,7 @@ import type { Position } from "../../../models/position.js";
 import type { IOTile, IOCrate } from "../../../models/djs.js";
 import { TILE_TYPE, type TileType } from "../../../models/tile_type.js";
 import { Tracker } from "./utils/tracker.js";
-import { manhattanDistance } from "../../../utils/metrics.js";
+import { manhattanDistance, posKey } from "../../../utils/metrics.js";
 
 /**
  * Beliefs about the static map layout and dynamic crate positions.
@@ -113,7 +113,7 @@ export class MapBeliefs {
         sensedPositions.forEach(position => {
             const tile = this.getTileAt(position);
             if (tile && tile.type === TILE_TYPE.SPAWN_POINT) {
-                this.spawnTilesSensingTimes.set(`${position.x},${position.y}`, currentTime);
+                this.spawnTilesSensingTimes.set(posKey(position), currentTime);
             }
         });
     }
@@ -124,7 +124,7 @@ export class MapBeliefs {
      * @returns The timestamp of the last sensing of the spawn tile, or undefined if never sensed.
      */
     getSpawnTileSensingTime(position: Position): number | undefined {
-        return this.spawnTilesSensingTimes.get(`${position.x},${position.y}`);
+        return this.spawnTilesSensingTimes.get(posKey(position));
     }
 
     /**
@@ -140,7 +140,7 @@ export class MapBeliefs {
                 const distance = manhattanDistance(tile, neighbor);
                 return distance <= observationDistance ? sum + (observationDistance - distance + 1) : sum;
             }, 0);
-            this.spawnTilesClusterWeights.set(`${tile.x},${tile.y}`, weight);
+            this.spawnTilesClusterWeights.set(posKey(tile), weight);
         }
     }
 
@@ -152,7 +152,7 @@ export class MapBeliefs {
      * Higher weights indicate tiles that can sense more spawn tiles when stood upon.
      */
     getSpawnTileClusterWeight(position: Position): number {
-        return this.spawnTilesClusterWeights.get(`${position.x},${position.y}`) ?? 0;
+        return this.spawnTilesClusterWeights.get(posKey(position)) ?? 0;
     }
 
     /**
@@ -192,7 +192,7 @@ export class MapBeliefs {
      * @param ttl How long to keep the tile blocked in milliseconds (default 1000ms)
      */
     markBlocked(pos: Position, ttl = 1_000): void {
-        this.temporaryBlocked.set(`${pos.x},${pos.y}`, Date.now() + ttl);
+        this.temporaryBlocked.set(posKey(pos), Date.now() + ttl);
     }
 
     /**
@@ -201,7 +201,7 @@ export class MapBeliefs {
      * @returns True if the tile is currently blocked, false otherwise
      */
     isBlocked(pos: Position): boolean {
-        const key = `${pos.x},${pos.y}`;
+        const key = posKey(pos);
         const exp = this.temporaryBlocked.get(key);
         if (exp === undefined) return false;
         if (Date.now() >= exp) { this.temporaryBlocked.delete(key); return false; }

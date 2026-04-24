@@ -7,13 +7,11 @@ import type { Position } from "../../../../models/position.js";
 export class CollisionTimer {
     private waitingUntil = 0;
     private waitingTile: Position | null = null;
-    private waitingStarted = 0;
 
     /** Resets the collision timer, clearing any waiting state. */
     reset(): void {
         this.waitingTile = null;
         this.waitingUntil = 0;
-        this.waitingStarted = 0;
     }
 
     /** Checks if the agent is currently waiting for a specific tile. */
@@ -33,23 +31,12 @@ export class CollisionTimer {
      */
     start(tile: Position, minMs: number, maxMs: number, now = Date.now()): void {
         this.waitingTile = tile;
-        this.waitingStarted = now;
         this.waitingUntil = now + this.randomDuration(minMs, maxMs);
     }
 
     /** Returns true if the collision timer has expired. */
     hasExpired(now = Date.now()): boolean {
         return this.waitingUntil > 0 && now >= this.waitingUntil;
-    }
-
-    /** Returns the elapsed time since the collision timer was started. */
-    getElapsed(now = Date.now()): number {
-        if (this.waitingStarted === 0) return 0;
-        return now - this.waitingStarted;
-    }
-
-    getStartedAt(): number {
-        return this.waitingStarted;
     }
 
     private randomDuration(minMs: number, maxMs: number): number {

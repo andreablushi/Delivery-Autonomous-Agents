@@ -1,4 +1,5 @@
 import { Observation } from "../../../../models/memory.js";
+import { isHalfPosition } from "../../../../utils/metrics.js";
 
 /**
  * Generic memory store with TTL-based soft expiry.
@@ -24,7 +25,7 @@ export class Memory<T> {
     update(key: string, value: T): void {
         // Avoid memoryzing intermediate positions
         const pos = (value as any)?.lastPosition;
-        if (pos && (!Number.isInteger(pos.x) || !Number.isInteger(pos.y))) return;
+        if (pos && isHalfPosition(pos)) return;
 
         // Initialize history array for new ids
         if (!this.memoryMap.has(key)){ 
@@ -50,15 +51,6 @@ export class Memory<T> {
         const now = Date.now();
         return (this.memoryMap.get(key) ?? [])
             .filter(e => now - e.seenAt <= this.ttl);
-    }
-
-    /**
-     * Remove all observations for a key from memory.
-     * @param key id of the object being tracked
-     * @returns void
-     */
-    delete(key: string): void {
-        this.memoryMap.delete(key);
     }
 
     /**
