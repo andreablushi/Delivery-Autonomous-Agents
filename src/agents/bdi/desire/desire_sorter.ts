@@ -6,6 +6,7 @@ import type {
     DeliverParcelDesire,
     GeneratedDesires,
 } from "../../../models/desires.js";
+import type { Position } from "../../../models/position.js";
 import { manhattanDistance } from "../../../utils/metrics.js";
 import { MapBeliefs } from "../belief/map_beliefs.js";
 import { IntentionQueue } from "../../../models/intentions.js";
@@ -15,7 +16,7 @@ import { IntentionQueue } from "../../../models/intentions.js";
  * Determines the priority tier of a desire type.
  * Priority tiers: PICKUP_PARCEL=3, PUTDOWN_PARCEL=2, REACH_PARCEL|DELIVER_PARCEL=1, EXPLORE=0
  */
-export function getPriorityForDesire(desire: DesireType): number {
+function getPriorityForDesire(desire: DesireType): number {
     if (desire.type === 'PICKUP_PARCEL') return 3;
     if (desire.type === 'PUTDOWN_PARCEL') return 2;
     if (desire.type === 'REACH_PARCEL' || desire.type === 'DELIVER_PARCEL') return 1;
@@ -131,7 +132,7 @@ function scoreDeliverDesire(desire: DeliverParcelDesire, beliefs: Beliefs): numb
  * @param now The current timestamp, used to calculate the age of the last sensing.
  * @returns A numeric score representing the desirability of exploring the target tile, where higher is better.
  */
-function scoreExplore(desire: ExploreDesire, agentPos: { x: number; y: number } | null, mapBeliefs: MapBeliefs, now: number): number {
+function scoreExplore(desire: ExploreDesire, agentPos: Position | null, mapBeliefs: MapBeliefs, now: number): number {
     if (!agentPos) return 0; // If we don't know our position, we can't calculate a meaningful score, so return 0.
 
     // Get spawn tile distance and age since last sensing

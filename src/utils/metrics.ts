@@ -12,3 +12,13 @@ export function posToDirection(from: Position, to: Position): string {
     if (to.y > from.y) return "up";
     return "down";
 }
+
+/** Stable string key for a grid position, suitable for Map/Set lookups. */
+export function posKey(pos: Position): string {
+    return `${pos.x},${pos.y}`;
+}
+
+/** True if either coordinate is non-integer (i.e. the agent is mid-move between tiles). */
+export function isHalfPosition(pos: Position): boolean {
+    return !Number.isInteger(pos.x) || !Number.isInteger(pos.y);
+}

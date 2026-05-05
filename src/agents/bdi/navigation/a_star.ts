@@ -1,5 +1,5 @@
 import type { Position } from "../../../models/position.js";
-import { manhattanDistance } from "../../../utils/metrics.js";
+import { manhattanDistance, posKey } from "../../../utils/metrics.js";
 
 type Node = {
     pos: Position;       // Position of the node
@@ -7,10 +7,6 @@ type Node = {
     f: number;           // Estimated total cost from start to goal through this node (g + heuristic)
     parent: Node | null; // Parent node in the path, used for path reconstruction
 };
-
-function posKey(pos: Position): string {
-    return `${pos.x},${pos.y}`;
-}
 
 const NEIGHBOURS: Position[] = [
     { x: 0, y: 1 },
