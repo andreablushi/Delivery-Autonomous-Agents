@@ -1,5 +1,5 @@
-import type { Position } from "../../../models/position.js";
-import { manhattanDistance, posKey } from "../../../utils/metrics.js";
+import type { Position } from "../../../../models/position.js";
+import { manhattanDistance, posKey } from "../../../../utils/metrics.js";
 
 type Node = {
     pos: Position;       // Position of the node

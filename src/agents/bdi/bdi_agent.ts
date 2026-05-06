@@ -3,6 +3,7 @@ import { Beliefs } from "./belief/beliefs.js";
 import { generateDesires } from "./desire/desire_generator.js";
 import { Intentions } from "./intention/intentions.js";
 import { Executor } from "./execution/executor.js";
+import { Planner } from "./plan/planner.js";
 
 /**
  * BDI Agent Implementation
@@ -13,6 +14,7 @@ export class BDIAgent {
     private socket: any;
     private debug: boolean;
     private beliefs: Beliefs;
+    private planner: Planner;
     private intentions: Intentions;
     private executor: Executor;
 
@@ -25,7 +27,8 @@ export class BDIAgent {
         this.debug = debug;
         this.beliefs = new Beliefs();
         this.intentions = new Intentions();
-        this.executor = new Executor(socket, this.beliefs, this.intentions, debug);
+        this.planner = new Planner(this.intentions);
+        this.executor = new Executor(socket, this.beliefs, this.intentions, this.planner, debug);
 
         // Initialize the agent info in the beliefs once the connection is established
         this.socket.once('you', (info : IOAgent) => {
@@ -109,8 +112,11 @@ export class BDIAgent {
         if (this.debug) console.log("[DELIBERATE] Desires:", desires);
 
         // Update intentions based on the new desires and current beliefs
-        this.intentions.update(this.beliefs, desires);
-        if (this.debug) console.log("[DELIBERATE] Current intention:", this.intentions.getCurrentIntention());  
+        this.intentions.update(this.beliefs);
+
+        // Plan the current intention and update the current plan in the planner
+        this.planner.plan(this.beliefs);
+        if (this.debug) console.log("[DELIBERATE] Current plan:", this.planner.getCurrentPlan());
         
         // Start executing the current intention if not already doing so
         this.executor.start();

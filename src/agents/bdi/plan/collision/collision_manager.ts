@@ -1,4 +1,7 @@
+import { Plan } from "../../../../models/plan.js";
 import type { Position } from "../../../../models/position.js";
+import { Beliefs } from "../../belief/beliefs.js";
+import { planAStar } from "../astar_planner.js";
 import { CollisionTimer } from "./collision_timer.js";
 
 /** Decision returned by CollisionManager on each collision event. */
@@ -51,7 +54,7 @@ export class CollisionManager {
         }
 
         // If the counter exceeds the retry limit, skip the remaining timer and force-mark
-        // the tile immediately — same escalation used in invalidatePath for move failures.
+        // the tile immediately
         if (this.invalidationCount > CollisionManager.INVALIDATION_RETRY_LIMIT) {
             return { kind: 'block', ttl: CollisionManager.INVALIDATION_BLOCKED_TTL_MS };
         }
@@ -77,5 +80,70 @@ export class CollisionManager {
             return { kind: 'block', ttl: CollisionManager.INVALIDATION_BLOCKED_TTL_MS };
         }
         return this.onPreDetection(tile);
+    }
+
+    /**
+     * Attempt to find a detour around the blocked tile using A*, and splice it into the current plan if it's within the configured threshold compared to waiting.
+     * @param plan The current plan that is being executed and may be modified with a detour if needed.
+     * @param from The current position of the agent, used as the starting point for the detour A* search.
+     * @param blockedTile The tile that is currently blocked by another agent, which the detour should attempt to navigate around.
+     * @param beliefs The agent's current beliefs, used to check walkability and plan the detour route.
+     * @returns 
+     */
+    tryDetour(plan: Plan, from: Position, blockedTile: Position, beliefs: Beliefs): boolean {
+        // Check if there is a next step and if it's a move step
+        const head = plan.targets[0];
+        if (!head) return false; // if there's no target, we can't really detour meaningfully
+
+        // Compute a detour plan from the current position to the original plan's next target, treating the blocked tile as an obstacle
+        const detourPlan = planAStar(from, head, beliefs, blockedTile);
+        if (!detourPlan) return false;
+
+        // If the detour plan is too long compared to the remaining steps in the original plan, prefer to wait instead to avoid excessive detours
+        const remaining = plan.steps.length - plan.cursor;
+        if (detourPlan.steps.length > remaining + this.detourThresholdSteps) return false;
+
+        // Splice the detour in place of the remaining steps.
+        plan.steps.splice(plan.cursor, plan.steps.length - plan.cursor, ...detourPlan.steps);
+
+        // Mark the blocked tile in beliefs to prevent other plans from trying to walk through it while we execute the detour, with a TTL to allow eventual re-attempts
+        beliefs.map.markBlocked(blockedTile, this.detourCommitTtl);
+
+        // Reset collision state to avoid interference with the next move attempt after the detour is spliced in
+        this.reset();
+
+        // Return true to indicate that a detour was successfully planned and applied to the current plan.
+        return true;
+    }
+
+    /**
+     * Commit a blocked tile in beliefs and replan the current plan around it.
+     * Called when the agent decides to treat a tile as blocked after pre-detection or move failure.
+     * @param plan The current plan that is being executed and may be modified with a new route if the block is committed.
+     * @param from The current position of the agent, used as the starting point for replanning.
+     * @param tile The tile to be marked as blocked.
+     * @param ttl The time-to-live for the blockage.
+     * @param beliefs The agent's current beliefs.
+     * @returns 
+     */
+    commitBlocked(plan: Plan, from: Position, tile: Position, ttl: number, beliefs: Beliefs): void {
+        // Mark the tile as blocked in beliefs to prevent it from being selected in future plans, with the specified TTL
+        beliefs.map.markBlocked(tile, ttl);
+        this.reset();
+
+        // Replan toward the same target with the tile now blocked in beliefs.
+        const head = plan.targets[0];
+        if (!head) return;
+
+        // Compute a new plan from the current position to the original plan's next target, with the updated beliefs that include the newly blocked tile
+        const replan = planAStar(from, head, beliefs);
+        if (!replan) {
+            plan.steps = [];
+            return;
+        }
+
+        // Splice the new plan in place of the remaining steps in the original plan, and reset the cursor to the start of the new steps
+        plan.steps = replan.steps;
+        plan.cursor = 0;
     }
 }

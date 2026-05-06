@@ -1,120 +1,122 @@
 import type { Position } from "../../../models/position.js";
 import type { Beliefs } from "../belief/beliefs.js";
+import type { Planner } from "../plan/planner.js";
 import type { Intentions } from "../intention/intentions.js";
 
 /**
- * Handles the execution loop: emits socket actions, updates beliefs, and advances
- * or invalidates the current intention path.
+ * Drives the action loop: asks the Planner for the next step on the current Plan,
+ * emits the corresponding socket action, and reports success/failure back to the Planner.
  */
 export class Executor {
-    // Flag to prevent multiple concurrent execution loops.
     private executing = false;
 
+    /**
+     * @param socket Socket connection to the Deliveroo.js server, used to emit actions.
+     * @param beliefs The agent's current beliefs, used to inform action execution and report results back to the planner.
+     * @param planner The agent's planner, used to get the current plan and report action execution results for replanning if necessary.
+     * @param replan Called after each successful move to rebuild desires/intentions with the updated position, allowing position-sensitive preemption (e.g. on-tile pickup) without waiting for the next sensing event.
+     * @param debug Set to true to enable debug logging of execution steps and results (dev mode).
+     */
     constructor(
-        private readonly socket: any,               // Socket is needed to emit actions and get acknowledgments for belief updates.
-        private readonly beliefs: Beliefs,          // Beliefs are needed to update the agent's understanding of the world after actions.
-        private readonly intentions: Intentions,    // Intentions are needed to determine which actions to execute and to advance/invalidate the current path.
-        private readonly debug: boolean,            // Debug flag to enable logging of execution steps and errors.
+        private readonly socket: any,
+        private readonly beliefs: Beliefs,
+        private readonly intentions: Intentions,
+        private readonly planner: Planner,
+        private readonly debug: boolean,
     ) {}
 
     /**
-     * Emit a pickup action and update parcel beliefs on success.
-     * @param pos The position to pick up from, used to update beliefs on success.
-     * @returns true if the pickup succeeded and beliefs were updated, false otherwise.
-     */
+     * Perform the pickup action at the given position, and report success/failure back to the planner for replanning decisions.
+     * @param pos The position to perform the pickup action at, used to identify the parcel being picked up for belief updates.
+     * @returns true if the pickup action succeeded and beliefs were updated, false if the action failed
+    */
     private async handlePickup(pos: Position): Promise<boolean> {
         const ack = await this.socket.emitPickup() as Array<{ id?: string; parcelId?: string }> | null;
         if (ack === null) return false;
-
-        // Optimistically mark the parcel as picked up in beliefs if the pickup succeeded, even if we don't have the parcel ID yet.
         const parcel = this.beliefs.parcels.getParcelAt(pos);
         if (parcel) this.beliefs.parcels.markPickup(parcel);
-
         return true;
     }
 
     /**
-     * Emit a putdown action and clean up delivered parcels on success.
-     * @param meId The agent's ID, used to find which parcels to clean up from beliefs on success.
-     * @returns true if the putdown succeeded and beliefs were updated, false otherwise.
+     * Perform the putdown action at the given position, and report success/failure back to the planner for replanning decisions.
+     * @param meId The ID of the agent performing the putdown action.
+     * @returns true if the putdown action succeeded and beliefs were updated, false if the action failed
      */
     private async handlePutdown(meId: string): Promise<boolean> {
         const ack = await this.socket.emitPutdown() as Array<{ id: string }>;
         if (ack.length === 0) return false;
-
-        // Optimistically mark the parcels as delivered in beliefs if the putdown succeeded, even if we don't have the parcel IDs yet.
-        this.beliefs.parcels.cleanDeliveredParcels(
-            this.beliefs.parcels.getCarriedByAgent(meId)
-        );
-
+        this.beliefs.parcels.cleanDeliveredParcels(this.beliefs.parcels.getCarriedByAgent(meId));
         return true;
     }
 
     /**
-     * Emit a move action and optimistically update the agent's position on success.
-     * @param direction The direction to move, used to emit the correct action and update beliefs on success.
-     * @returns true if the move succeeded and beliefs were updated, false otherwise.
+     * Perform the move action in the given direction, and report success/failure back to the planner for replanning decisions.
+     * @param direction The direction to move in, used to update beliefs about the agent's position if the move succeeds.
+     * @returns true if the move action succeeded and beliefs were updated, false if the action failed (e.g. due to a blocked tile)
      */
     private async handleMove(direction: string): Promise<boolean> {
         const result = await this.socket.emitMove(direction) as Position | false;
         if (result === false) return false;
-
-        // Optimistically update the agent's position in beliefs if the move succeeded.
         this.beliefs.agents.updateMyPosition(result);
-
         return true;
     }
 
     /**
-     * Execute one step of the current intention.
-     * @returns true if the intention is still active after this step.
+     * Execute one step of the current plan.
+     * @returns true if there is still a plan after this step.
      */
     async execute(): Promise<boolean> {
-        // Get the agent's current position from beliefs. If we don't have it, we can't execute any move-based intentions, so return false to wait for beliefs to update.
         const me = this.beliefs.agents.getCurrentMe();
         if (!me?.lastPosition) return false;
         const currentPosition = me.lastPosition;
 
-        // Get the next action to execute from intentions based on the current position and beliefs.
-        const move = this.intentions.getNextAction(currentPosition, this.beliefs);
+        // If there is no current plan, or the current plan is invalid under the latest beliefs, do nothing and wait for the next execution cycle to trigger replanning with the updated beliefs.
+        const plan = this.planner.getCurrentPlan();
+        if (!plan) return false;
 
-        // Log the chosen action for debugging.
-        if (move === 'wait') {
+        // Get the next step from the planner, which may trigger collision management logic if the step is blocked by another agent.
+        const step = this.planner.nextStep(currentPosition, this.beliefs);
+
+        // If the planner indicates to wait (e.g. due to a temporarily blocked tile), or if there is no safe step to execute, do nothing and wait for the next execution cycle to re-attempt.
+        if (step === "wait") {
             if (this.debug) console.log("[EXECUTE] Waiting for blocked tile to clear.");
             return false;
         }
-        if (move === null) {
-            if (this.debug) console.log("[EXECUTE] No safe move to execute.");
+        // If there is no step to execute (e.g. plan became invalid and has no alternative steps), do nothing and wait for the next execution cycle to trigger replanning.
+        if (step === null) {
+            if (this.debug) console.log("[EXECUTE] No safe step to execute.");
             return false;
         }
-        if (this.debug) console.log("[EXECUTE] Action:", move);
+        // If we have a valid step to execute, perform it and report the result back to the planner for potential replanning decisions.
+        if (this.debug) console.log("[EXECUTE] Step:", step);
 
-        // Execute the action and update beliefs optimistically based on the type of action.
+        // Perform the step and get the result to report back to the planner.
         let succeeded: boolean;
-        if (move === 'pickup') succeeded = await this.handlePickup(currentPosition);
-        else if (move === 'putdown') succeeded = await this.handlePutdown(me.id);
-        else succeeded = await this.handleMove(move);
+        if (step.kind === "pickup") succeeded = await this.handlePickup(currentPosition);
+        else if (step.kind === "putdown") succeeded = await this.handlePutdown(me.id);
+        else succeeded = await this.handleMove(step.direction);
 
-        // If the action succeeded, advance the intention path. 
-        if (succeeded) this.intentions.shiftPath();
-        // If the action failed, invalidate the current intention path to trigger replanning.
-        else this.intentions.invalidatePath();
+        // Report the result back to the planner, which may advance the plan or trigger replanning if the action failed.
+        if (succeeded) {
+            this.planner.advance();
+            // Refresh the beliefs and intentions after a successful move to allow for position-sensitive replanning
+            this.intentions.update(this.beliefs);
+            this.planner.plan(this.beliefs);
+        } else {
+            this.planner.invalidate(this.beliefs);
+        }
 
-        // Return whether we still have an active intention after this step.
-        return this.intentions.getCurrentIntention() !== null;
+        // Return whether there is still a plan to execute after this step.
+        return this.planner.getCurrentPlan() !== null;
     }
 
-    /**
-     * Start the execution loop. No-ops if already running.
-     */
     async start(): Promise<void> {
         if (this.executing) return;
         this.executing = true;
         try {
-            // Continuously execute steps of the current intention until there are no more active intentions or an error occurs.
             while (this.executing) {
                 const shouldContinue = await this.execute();
-                // If we can't continue executing (e.g. waiting for beliefs to update), wait a short time before trying again to avoid busy looping.
                 if (!shouldContinue) await new Promise(r => setTimeout(r, 200));
             }
         } catch (err) {
