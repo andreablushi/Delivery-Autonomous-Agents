@@ -76,6 +76,9 @@ export class MapBeliefs {
         // If there's no tile (out of bounds) or it's a wall, it's not walkable
         if (tile === null || tile.type === TILE_TYPE.WALL) return false;
 
+        // If a crate is currently at this position, it's not walkable
+        if (this.isCrateAt(to)) return false;
+
         // If it's temporary blocked (e.g. occupied by another agent or crate), it's not walkable
         if (this.isBlocked(to)) return false;
 
@@ -206,6 +209,41 @@ export class MapBeliefs {
         if (exp === undefined) return false;
         if (Date.now() >= exp) { this.temporaryBlocked.delete(key); return false; }
         return true;
+    }
+
+    /**
+     * Check if any known crate is currently believed to be at the given position.
+     */
+    isCrateAt(pos: Position): boolean {
+        return this.crates.getCurrentAll().some(
+            c => c.lastPosition?.x === pos.x && c.lastPosition?.y === pos.y
+        );
+    }
+
+    /**
+     * Width and height of the loaded map, or null if the map has not been received yet.
+     */
+    getMapSize(): { width: number; height: number } | null {
+        if (!this.map) return null;
+        return { width: this.map.width, height: this.map.height };
+    }
+
+    /**
+     * All tiles that are of CRATE_SPACE type (can hold a crate), regardless of occupancy.
+     * Used for PDDL problem generation.
+     */
+    getCrateSpaceTiles(): Tile[] {
+        if (!this.map) return [];
+        const result: Tile[] = [];
+        for (let y = 0; y < this.map.height; y++) {
+            for (let x = 0; x < this.map.width; x++) {
+                const type = this.map.tiles[y][x];
+                if (type === TILE_TYPE.CRATE_SPACE || type === TILE_TYPE.CRATE_OCCUPIED) {
+                    result.push({ x, y, type });
+                }
+            }
+        }
+        return result;
     }
 
     /**

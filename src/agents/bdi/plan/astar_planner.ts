@@ -1,7 +1,7 @@
 import { aStar } from "./navigation/a_star.js";
 import type { Beliefs } from "../belief/beliefs.js";
 import type { Position } from "../../../models/position.js";
-import type { NavigationDesire } from "../../../models/desires.js";
+import type { DesireType, NavigationDesire } from "../../../models/desires.js";
 import type { Plan, PlanStep } from "../../../models/plan.js";
 import { toMoveSteps } from "./utils/action_mapper.js";
 
@@ -12,7 +12,7 @@ import { toMoveSteps } from "./utils/action_mapper.js";
  * @param beliefs Current beliefs of the agent, used to determine walkability of tiles for A* search.
  * @returns A Plan object containing the sequence of steps to achieve the desire, or null if no plan can be constructed.
  */ 
-export function planAStar(from: Position, intention: NavigationDesire, beliefs: Beliefs, blockedTile: Position | null = null): Plan | null {
+export function planAStar(from: Position, intention: DesireType, beliefs: Beliefs, blockedTile: Position | null = null): Plan | null {
     // Retrieve the target position from the desire
     const to = intention.target;
 

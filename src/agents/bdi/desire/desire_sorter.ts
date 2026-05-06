@@ -4,6 +4,7 @@ import type {
     ExploreDesire,
     ReachParcelDesire,
     DeliverParcelDesire,
+    ClearCrateDesire,
     GeneratedDesires,
 } from "../../../models/desires.js";
 import type { Position } from "../../../models/position.js";
@@ -14,10 +15,10 @@ import { IntentionQueue } from "../../../models/intentions.js";
 
 /**
  * Determines the priority tier of a desire type.
- * Priority tiers: REACH_PARCEL|DELIVER_PARCEL=1, EXPLORE=0.
- * On-tile REACH_PARCEL beats DELIVER_PARCEL via Infinity score within tier 1.
+ * Priority tiers: CLEAR_CRATE=2, REACH_PARCEL|DELIVER_PARCEL=1, EXPLORE=0.
  */
 function getPriorityForDesire(desire: DesireType): number {
+    if (desire.type === 'CLEAR_CRATE') return 2;
     if (desire.type === 'REACH_PARCEL' || desire.type === 'DELIVER_PARCEL') return 1;
     return 0;
 }
@@ -35,6 +36,12 @@ function getPriorityForDesire(desire: DesireType): number {
  */
 export function getIntentionQueue(desires: GeneratedDesires, beliefs: Beliefs): IntentionQueue {
     const queue: IntentionQueue = [];
+
+    // CLEAR_CRATE always wins 
+    const clears = (desires.get("CLEAR_CRATE") ?? []) as ClearCrateDesire[];
+    for (const desire of clears) {
+        queue.push({ desire, score: Infinity });
+    }
 
     // Goal desires require scoring and comparison
     const reaches = (desires.get("REACH_PARCEL") ?? []) as ReachParcelDesire[];

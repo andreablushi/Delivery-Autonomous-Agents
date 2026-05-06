@@ -1,5 +1,6 @@
 import type {
     GeneratedDesires,
+    ClearCrateDesire,
     ExploreDesire,
     ReachParcelDesire,
     DeliverParcelDesire,
@@ -17,6 +18,11 @@ import type { Beliefs } from "../belief/beliefs.js";
  */
 export function generateDesires(beliefs: Beliefs): GeneratedDesires {
     const desires: GeneratedDesires = new Map();
+
+    // CLEAR_CRATE is injected first so the sorter gives it Infinity priority — set by the planner
+    // when a crate blocks the path and cleared when the PDDL plan completes.
+    const crateDesire = beliefs.getPendingCrateDesire();
+    if (crateDesire) desires.set("CLEAR_CRATE", [crateDesire] as ClearCrateDesire[]);
 
     // REACH_PARCEL for each available parcel with a known position
     const reachParcel = generateReachParcelDesires(beliefs);

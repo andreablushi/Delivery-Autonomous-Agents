@@ -24,8 +24,13 @@ export type DeliverParcelDesire = {
 // All desires require navigation and always have a `target` position
 export type NavigationDesire = ExploreDesire | ReachParcelDesire | DeliverParcelDesire;
 
-// The full desire union — currently identical to NavigationDesire, kept distinct for forward compatibility
-export type DesireType = NavigationDesire;
+export type ClearCrateDesire = {
+    type: "CLEAR_CRATE";
+    target: Position;        // original target the agent wants to reach (PDDL goal: at destination)
+    crateIds: string[];      // IDs of crates detected as blocking this route
+};
+
+export type DesireType = NavigationDesire | ClearCrateDesire;
 
 // Grouped map for easier access to desires by type
 export type GeneratedDesires = Map<DesireType["type"], DesireType[]>;
