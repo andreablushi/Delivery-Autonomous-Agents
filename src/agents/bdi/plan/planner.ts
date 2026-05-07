@@ -77,7 +77,7 @@ export class Planner {
             // If this desire was removed from the tracking map (drift recovery cleanup),
             // drop the stale queue entry and replan.
             if (!this.intentionManager.hasCrateDesireFor(desire.target)) {
-                this.intentionManager.dropIntention();
+                this.intentionManager.dropIntentionHead();
                 return this.plan(beliefs);
             }
 
@@ -107,7 +107,7 @@ export class Planner {
                 if (!plan) {
                     // Solver failed — remove desire from tracking map; stale queue entry is cleaned
                     // on the next plan() call via the hasCrateDesireFor() guard above.
-                    this.intentionManager.dropCrateDesire(posKey(desire.target));
+                    this.intentionManager.dropIntentionHead();
                 }
                 // Wake the agent regardless of outcome — do not wait for next sensing event.
                 this.onPddlReady();
@@ -124,7 +124,7 @@ export class Planner {
                 // EXPLORE has many alternative targets — drop this one and try the rest before
                 // paying the PDDL solver cost. Only escalate when all alternatives are exhausted.
                 if (desire.type !== "REACH_PARCEL" && desire.type !== "DELIVER_PARCEL") {
-                    this.intentionManager.dropIntention();
+                    this.intentionManager.dropIntentionHead();
                     const fallback = this.plan(beliefs);
                     if (fallback !== null) return fallback;
                     // All alternatives exhausted — fall through to PDDL.
@@ -143,10 +143,10 @@ export class Planner {
                     });
                 }
                 // Drop the blocked desire and continue with other desires while the solver runs.
-                this.intentionManager.dropIntention();
+                this.intentionManager.dropIntentionHead();
                 return this.plan(beliefs);
             }
-            this.intentionManager.dropIntention();
+            this.intentionManager.dropIntentionHead();
             return this.plan(beliefs);
         }
 
@@ -237,9 +237,9 @@ export class Planner {
         plan.cursor++;
         if (plan.cursor >= plan.steps.length) {
             this.currentPlan = null;
-            // Reset PDDL state; dropIntention() removes the CLEAR_CRATE entry from crateDesires if applicable.
+            // Reset PDDL state; dropIntentionHead() removes the CLEAR_CRATE entry from crateDesires if applicable.
             this.pddlPlanner.reset();
-            this.intentionManager.dropIntention();
+            this.intentionManager.dropIntentionHead();
         }
         this.collision.reset();
     }
