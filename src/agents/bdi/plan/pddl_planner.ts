@@ -21,7 +21,7 @@ async function planPddl(
 
     console.log("[PDDL] Submitting crate-clearing problem to solver...");
     const rawPlan = await (onlineSolver as (d: string, p: string) => Promise<PddlPlanStep[] | undefined>)(domain, problem);
-
+    console.log("[PDDL] Solver response received.");
     if (!rawPlan || rawPlan.length === 0) {
         console.warn("[PDDL] No plan returned by solver.");
         return null;
@@ -31,7 +31,7 @@ async function planPddl(
     if (steps.length === 0) return null;
 
     console.log(`[PDDL] Plan received: ${steps.length} steps.`);
-    return { source: "pddl", steps, cursor: 0, targets: [intention] };
+    return { source: "pddl", steps, cursor: 0, targets: [intention], startPosition: from };
 }
 
 /**

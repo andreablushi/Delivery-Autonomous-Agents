@@ -6,6 +6,7 @@ import { planAStar } from "./astar_planner.js";
 import { PddlPlanner } from "./pddl_planner.js";
 import { aStar } from "./navigation/a_star.js";
 import { CollisionManager } from "./collision/collision_manager.js";
+import { toMoveSteps } from "./utils/action_mapper.js";
 
 import { Intentions } from "../intention/intentions.js";
 
@@ -13,7 +14,7 @@ import type { Beliefs } from "../belief/beliefs.js";
 import type { Position } from "../../../models/position.js";
 import type { Plan, PlanStep } from "../../../models/plan.js";
 import type { NavigationDesire, ClearCrateDesire } from "../../../models/desires.js";
-import { generateDesires } from "../desire/desire_generator.js";
+import { posKey } from "../../../utils/metrics.js";
 
 const CRATE_DOMAIN_PATH = join(dirname(fileURLToPath(import.meta.url)), "pddl", "domain-crates.pddl");
 
@@ -69,22 +70,44 @@ export class Planner {
 
         const desire = head.desire;
 
-        // CLEAR_CRATE: consume a ready PDDL plan or fire the solver once (no-op if in-flight).
+        // CLEAR_CRATE: the desire is only present in the queue after the solver responded.
+        // Consume the ready PDDL plan, prepend an A* bridge if the agent has moved since the request,
+        // or re-fire the solver if the plan was reset by position-drift handling.
         if (desire.type === "CLEAR_CRATE") {
-            const ready = this.pddlPlanner.consume();
-            console.log(`[PDDL] CLEAR_CRATE at head — waiting=${this.pddlPlanner.isWaiting()} ready=${!!ready}`);
-            if (ready) { 
-                this.currentPlan = ready; return ready; }
-            // If already at target, drop intention and replan instead of sending to PDDL
-            if (me.lastPosition.x === desire.target.x && me.lastPosition.y === desire.target.y) {
+            // If this desire was removed from the tracking map (drift recovery cleanup),
+            // drop the stale queue entry and replan.
+            if (!this.intentionManager.hasCrateDesireFor(desire.target)) {
                 this.intentionManager.dropIntention();
                 return this.plan(beliefs);
             }
+
+            const ready = this.pddlPlanner.consume();
+            console.log(`[PDDL] CLEAR_CRATE at head — waiting=${this.pddlPlanner.isWaiting()} ready=${!!ready}`);
+
+            if (ready) {
+                // If the agent has moved since the plan was built, prepend A* steps to bridge the gap.
+                let plan: Plan = ready;
+                if (plan.startPosition &&
+                    (me.lastPosition.x !== plan.startPosition.x || me.lastPosition.y !== plan.startPosition.y)) {
+                    const bridgePath = aStar(me.lastPosition, plan.startPosition, (f, t) => beliefs.map.isWalkable(f, t));
+                    if (bridgePath && bridgePath.length > 0) {
+                        const bridgeSteps = toMoveSteps(me.lastPosition, bridgePath);
+                        plan = { ...plan, steps: [...bridgeSteps, ...plan.steps], cursor: 0 };
+                    }
+                    // If bridgePath is null, start is unreachable — proceed with the PDDL plan as-is
+                    // and let position drift handling in nextStep() deal with it.
+                }
+                this.currentPlan = plan;
+                return plan;
+            }
+
+            // No ready plan — re-request from the current position (drift recovery: pddlPlanner was
+            // reset by nextStep() on position drift).
             this.pddlPlanner.request(desire, beliefs, plan => {
                 if (!plan) {
-                    // Solver failed — give up on crate clearing and try something else.
-                    this.beliefs.setPendingCrateDesire(null);
-                    this.intentionManager.dropIntention();
+                    // Solver failed — remove desire from tracking map; stale queue entry is cleaned
+                    // on the next plan() call via the hasCrateDesireFor() guard above.
+                    this.intentionManager.dropCrateDesire(posKey(desire.target));
                 }
                 // Wake the agent regardless of outcome — do not wait for next sensing event.
                 this.onPddlReady();
@@ -106,10 +129,21 @@ export class Planner {
                     if (fallback !== null) return fallback;
                     // All alternatives exhausted — fall through to PDDL.
                 }
-                console.log(`[PDDL] Crate block detected — setting pendingCrateDesire for ${crateBlock.crateIds.join(",")}`);
-                this.beliefs.setPendingCrateDesire(crateBlock);
-                console.log(`[PDDL] Replanning after setting pendingCrateDesire...`);
-                this.intentionManager.update(beliefs, generateDesires(beliefs));
+                // Fire the solver if not already in-flight and no desire is already tracked for this target.
+                // The CLEAR_CRATE desire is added to intentions only when the solver returns a valid plan.
+                if (!this.pddlPlanner.isWaiting() && !this.intentionManager.hasCrateDesireFor(crateBlock.target)) {
+                    console.log(`[PDDL] Crate block detected — requesting PDDL plan for ${crateBlock.crateIds.join(",")}`);
+                    this.pddlPlanner.request(crateBlock, beliefs, plan => {
+                        if (plan) {
+                            // Add the CLEAR_CRATE desire only when the solver returns a valid plan.
+                            this.intentionManager.addCrateDesire(crateBlock);
+                        }
+                        // Wake the agent regardless of outcome — do not wait for next sensing event.
+                        this.onPddlReady();
+                    });
+                }
+                // Drop the blocked desire and continue with other desires while the solver runs.
+                this.intentionManager.dropIntention();
                 return this.plan(beliefs);
             }
             this.intentionManager.dropIntention();
@@ -134,13 +168,17 @@ export class Planner {
 
         if (!pathIgnoringCrates) return null; // truly unreachable even without crates
 
-        const blockingIds = crates
-            .filter(c => pathIgnoringCrates.some(p => p.x === c.lastPosition!.x && p.y === c.lastPosition!.y))
-            .map(c => c.id);
+        const blockingCrates = crates.filter(c =>
+            pathIgnoringCrates.some(p => p.x === c.lastPosition!.x && p.y === c.lastPosition!.y)
+        );
 
-        if (blockingIds.length === 0) return null;
+        if (blockingCrates.length === 0) return null;
 
-        return { type: "CLEAR_CRATE", target: desire.target, crateIds: blockingIds };
+        return {
+            type: "CLEAR_CRATE",
+            target: desire.target, // original destination — PDDL goal; plan_parser slices at last push
+            crateIds: blockingCrates.map(c => c.id),
+        };
     }
 
     getCurrentPlan(): Plan | null {
@@ -199,8 +237,7 @@ export class Planner {
         plan.cursor++;
         if (plan.cursor >= plan.steps.length) {
             this.currentPlan = null;
-            // Clear PDDL state and the crate desire so desire_generator stops injecting CLEAR_CRATE.
-            this.beliefs.setPendingCrateDesire(null);
+            // Reset PDDL state; dropIntention() removes the CLEAR_CRATE entry from crateDesires if applicable.
             this.pddlPlanner.reset();
             this.intentionManager.dropIntention();
         }
@@ -210,9 +247,6 @@ export class Planner {
     invalidate(beliefs: Beliefs): boolean {
         const plan = this.currentPlan;
         if (!plan) return true;
-
-        // PDDL plans run to completion — a transient move failure retries on the next tick.
-        if (plan.source === "pddl") return false;
 
         const step = plan.steps[plan.cursor];
         if (!step || step.kind !== "move") return true;

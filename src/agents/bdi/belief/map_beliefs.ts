@@ -79,7 +79,7 @@ export class MapBeliefs {
         // If a crate is currently at this position, it's not walkable
         if (this.isCrateAt(to)) return false;
 
-        // If it's temporary blocked (e.g. occupied by another agent or crate), it's not walkable
+        // If it's temporary blocked (e.g. occupied by another agent), it's not walkable
         if (this.isBlocked(to)) return false;
 
         // Conveyors block entry only from the direction that opposes their push.

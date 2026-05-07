@@ -15,11 +15,11 @@ import { IntentionQueue } from "../../../models/intentions.js";
 
 /**
  * Determines the priority tier of a desire type.
- * Priority tiers: CLEAR_CRATE=2, REACH_PARCEL|DELIVER_PARCEL=1, EXPLORE=0.
+ * Priority tiers: REACH_PARCEL|DELIVER_PARCEL=2, CLEAR_CRATE=1, EXPLORE=0.
  */
 function getPriorityForDesire(desire: DesireType): number {
-    if (desire.type === 'CLEAR_CRATE') return 2;
-    if (desire.type === 'REACH_PARCEL' || desire.type === 'DELIVER_PARCEL') return 1;
+    if (desire.type === 'REACH_PARCEL' || desire.type === 'DELIVER_PARCEL') return 2;
+    if (desire.type === 'CLEAR_CRATE') return 1;
     return 0;
 }
 
@@ -28,20 +28,15 @@ function getPriorityForDesire(desire: DesireType): number {
  *
  * Priority tiers:
  *   1. Goal     - REACH_PARCEL and DELIVER_PARCEL, scored independently and compared.
- *   2. Fallback - EXPLORE (nearest spawn outside the observation range).
+ *   2. Clear    - CLEAR_CRATE, pursued when no goal desire is currently reachable.
+ *   3. Fallback - EXPLORE (nearest spawn outside the observation range).
  *
- * @param desires Grouped desires from the generator.
+ * @param desires Grouped desires from the generator (may include CLEAR_CRATE injected by Intentions.update()).
  * @param beliefs Current beliefs of the agent.
  * @returns The ordered desire queue, or an empty array if no candidates are available.
  */
 export function getIntentionQueue(desires: GeneratedDesires, beliefs: Beliefs): IntentionQueue {
     const queue: IntentionQueue = [];
-
-    // CLEAR_CRATE always wins 
-    const clears = (desires.get("CLEAR_CRATE") ?? []) as ClearCrateDesire[];
-    for (const desire of clears) {
-        queue.push({ desire, score: Infinity });
-    }
 
     // Goal desires require scoring and comparison
     const reaches = (desires.get("REACH_PARCEL") ?? []) as ReachParcelDesire[];
@@ -54,6 +49,13 @@ export function getIntentionQueue(desires: GeneratedDesires, beliefs: Beliefs): 
     // Score deliver desires independently
     for (const desire of delivers) {
         queue.push({ desire, score: scoreDeliverDesire(desire, beliefs)});
+    }
+
+    // CLEAR_CRATE sits between goal desires (tier 2) and fallback exploration (tier 0).
+    // Injected into desires by Intentions.update() from the crateDesires tracking map.
+    const clears = (desires.get("CLEAR_CRATE") ?? []) as ClearCrateDesire[];
+    for (const desire of clears) {
+        queue.push({ desire, score: 0 });
     }
 
     // Fallback to exploration desires

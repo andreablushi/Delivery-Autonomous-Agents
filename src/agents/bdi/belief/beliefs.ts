@@ -1,6 +1,5 @@
 import type { IOClockEvent, IOConfig } from "../../../models/djs.js";
 import type { GameSettings } from "../../../models/config.js";
-import type { ClearCrateDesire } from "../../../models/desires.js";
 import { AgentBeliefs } from "./agent_beliefs.js";
 import { MapBeliefs } from "./map_beliefs.js";
 import { ParcelBeliefs } from "./parcel_beliefs.js";
@@ -34,12 +33,6 @@ export class Beliefs {
 
     // Centralized game settings distributed to sub-systems on arrival
     settings: GameSettings | null = null;
-
-    // Set by the planner when a crate blocks the agent's path; consumed by desire_generator to inject CLEAR_CRATE
-    private _pendingCrateDesire: ClearCrateDesire | null = null;
-
-    getPendingCrateDesire(): ClearCrateDesire | null { return this._pendingCrateDesire; }
-    setPendingCrateDesire(d: ClearCrateDesire | null): void { this._pendingCrateDesire = d; }
 
     /**
      * Set game configuration and distribute relevant slices to each sub-system.

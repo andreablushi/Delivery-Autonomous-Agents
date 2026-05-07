@@ -57,5 +57,7 @@ export function parsePddlPlan(rawPlan: PddlPlanStep[]): PlanStep[] {
     }
 
     // Stop after the last push — agent re-enters normal BDI loop once crates are cleared.
-    return lastPushIdx >= 0 ? steps.slice(0, lastPushIdx + 1) : steps;
+    // If the solver returned no push steps the plan is useless (navigation-only), so return []
+    // which causes pddl_planner to treat it as a failed request.
+    return lastPushIdx >= 0 ? steps.slice(0, lastPushIdx + 1) : [];
 }

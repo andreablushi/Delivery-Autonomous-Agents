@@ -81,7 +81,7 @@ export class BDIAgent {
 
     /**
      * One deliberation cycle: rebuild desires → update intention queue → plan → execute one step.
-     * CLEAR_CRATE enters the desires automatically via beliefs.getPendingCrateDesire().
+     * CLEAR_CRATE enters the deliberation cycle automatically via intentions.crateDesires.
      */
     deliberate(): void {
         const desires = generateDesires(this.beliefs);

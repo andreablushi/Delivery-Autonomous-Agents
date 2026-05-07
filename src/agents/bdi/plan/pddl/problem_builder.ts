@@ -77,6 +77,7 @@ export function buildProblem(from: Position, intention: ClearCrateDesire, belief
         crateObjs ? `${crateObjs} - crate` : "",
     ].filter(Boolean).join(" ");
 
+    console.log("Target position:", intention.target);
     return `(define (problem crate-clear)
     (:domain deliveroo-crates)
     (:objects ${objects})

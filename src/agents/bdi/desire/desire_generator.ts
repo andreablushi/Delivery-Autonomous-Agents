@@ -1,6 +1,5 @@
 import type {
     GeneratedDesires,
-    ClearCrateDesire,
     ExploreDesire,
     ReachParcelDesire,
     DeliverParcelDesire,
@@ -13,16 +12,12 @@ import type { Beliefs } from "../belief/beliefs.js";
     * - For each available parcel with a known position, generate a REACH_PARCEL desire targeting that position.
     * - If the agent is carrying any parcels, generate a DELIVER_PARCEL desire for each delivery tile, targeting the tile's position.
     * - If there are no available parcels, generate an EXPLORE desire for each spawn tile, targeting the tile's position.
+    * Note: CLEAR_CRATE desires are tracked in Intentions and injected into the queue via intentions.update().
     * @param beliefs Current beliefs of the agent, used to determine available parcels, carried parcels, and tile positions.
     * @returns A map of desire types to arrays of generated desires, which may be empty if no desires of that type are applicable.
  */
 export function generateDesires(beliefs: Beliefs): GeneratedDesires {
     const desires: GeneratedDesires = new Map();
-
-    // CLEAR_CRATE is injected first so the sorter gives it Infinity priority — set by the planner
-    // when a crate blocks the path and cleared when the PDDL plan completes.
-    const crateDesire = beliefs.getPendingCrateDesire();
-    if (crateDesire) desires.set("CLEAR_CRATE", [crateDesire] as ClearCrateDesire[]);
 
     // REACH_PARCEL for each available parcel with a known position
     const reachParcel = generateReachParcelDesires(beliefs);
