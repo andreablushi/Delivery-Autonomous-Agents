@@ -3,11 +3,8 @@ import type { Position } from "../../../../models/position.js";
 import { Beliefs } from "../../belief/beliefs.js";
 import { planAStar } from "../astar_planner.js";
 import { CollisionTimer } from "./collision_timer.js";
+import type { CollisionDecision } from "../../../../models/plan.js";
 
-/** Decision returned by CollisionManager on each collision event. */
-export type CollisionDecision =
-    | { kind: 'wait' }
-    | { kind: 'block'; ttl: number };
 
 /**
  * Encapsulates the collision state machine: tracks how long we've been waiting on a specific
@@ -88,7 +85,7 @@ export class CollisionManager {
      * @param from The current position of the agent, used as the starting point for the detour A* search.
      * @param blockedTile The tile that is currently blocked by another agent, which the detour should attempt to navigate around.
      * @param beliefs The agent's current beliefs, used to check walkability and plan the detour route.
-     * @returns 
+     * @returns A boolean indicating whether a detour was successfully planned and applied.
      */
     tryDetour(plan: Plan, from: Position, blockedTile: Position, beliefs: Beliefs): boolean {
         // Check if there is a next step and if it's a move step
@@ -125,27 +122,28 @@ export class CollisionManager {
      * @param tile The tile to be marked as blocked.
      * @param ttl The time-to-live for the blockage.
      * @param beliefs The agent's current beliefs.
-     * @returns 
+     * @returns A boolean indicating whether the blocked tile was successfully committed and the plan was replanned.
      */
-    commitBlocked(plan: Plan, from: Position, tile: Position, ttl: number, beliefs: Beliefs): void {
+    commitBlocked(plan: Plan, from: Position, tile: Position, ttl: number, beliefs: Beliefs): boolean {
         // Mark the tile as blocked in beliefs to prevent it from being selected in future plans, with the specified TTL
         beliefs.map.markBlocked(tile, ttl);
         this.reset();
 
         // Replan toward the same target with the tile now blocked in beliefs.
         const head = plan.targets[0];
-        if (!head) return;
-        if (head.type !== "REACH_PARCEL" && head.type !== "DELIVER_PARCEL") return;
+        if (!head) return false;
+        if (head.type !== "REACH_PARCEL" && head.type !== "DELIVER_PARCEL") return false;
 
         // Compute a new plan from the current position to the original plan's next target, with the updated beliefs that include the newly blocked tile
         const replan = planAStar(from, head, beliefs);
         if (!replan) {
             plan.steps = [];
-            return;
+            return false;
         }
 
         // Splice the new plan in place of the remaining steps in the original plan, and reset the cursor to the start of the new steps
         plan.steps = replan.steps;
         plan.cursor = 0;
+        return true;
     }
 }
